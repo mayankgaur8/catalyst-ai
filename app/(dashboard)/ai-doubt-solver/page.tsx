@@ -1,25 +1,23 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useState, useRef } from "react";
 import {
-  Brain, Upload, Mic, Send, Lightbulb, CheckCircle,
-  Sparkles, BookOpen, ArrowRight, Copy, ThumbsUp, ThumbsDown, Loader2
+  Brain, Upload, Mic, Send,
+  Sparkles, BookOpen, ArrowRight, Copy, ThumbsUp, ThumbsDown, Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SAMPLE_QUESTIONS } from "@/lib/data";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface Message {
   id: number;
   role: "user" | "ai";
   content: string;
-  question?: string;
-  solution?: {
-    steps: string[];
-    shortcut?: string;
-    conceptNote?: string;
-  };
+  provider?: string;
+  cached?: boolean;
   loading?: boolean;
+  error?: boolean;
 }
 
 const DOUBT_EXAMPLES = [
@@ -30,24 +28,14 @@ const DOUBT_EXAMPLES = [
   "How to identify the main idea in an RC passage?",
 ];
 
-const AI_RESPONSE: Message["solution"] = {
-  steps: [
-    "**Step 1:** Identify the pattern in powers of 7 mod 48",
-    "7¹ = 7, 7² = 49 ≡ 1 (mod 48)",
-    "**Step 2:** Since 7² ≡ 1 (mod 48), any even power of 7 ≡ 1",
-    "**Step 3:** 7^100 = (7²)^50 ≡ 1^50 = 1 (mod 48)",
-    "**Answer: Remainder = 1** ✓",
-  ],
-  shortcut: "For remainder problems: find the cyclicity! If a^n ≡ 1 (mod m) for some small n, then a^(kn) ≡ 1 for any k.",
-  conceptNote: "This uses Euler's theorem. For CAT, remember: powers of small numbers create cycles. 7² ≡ 1 (mod 48) means the cycle length is 2.",
-};
-
 export default function AIDoubtSolverPage() {
+  const { user, plan, isAdmin } = useAuthStore();
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 0,
       role: "ai",
-      content: "Hello! I'm your AI CAT mentor. Ask me any doubt — type it, upload an image, or pick an example below. I'll solve it step-by-step with shortcuts and CAT strategies. 🎯",
+      content: "Hello! I'm your AI CAT mentor. Ask me any doubt — type it, upload an image, or pick an example below. I'll solve it step-by-step with shortcuts and CAT strategies.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -57,27 +45,62 @@ export default function AIDoubtSolverPage() {
   const nextMessageIdRef = useRef(1);
 
   const sendMessage = async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || loading) return;
+
     const userMsg: Message = { id: nextMessageIdRef.current++, role: "user", content: text };
-    setMessages((m) => [...m, userMsg]);
+    const loadingMsg: Message = { id: nextMessageIdRef.current++, role: "ai", content: "", loading: true };
+    setMessages((m) => [...m, userMsg, loadingMsg]);
     setInput("");
     setLoading(true);
 
-    // Simulate AI response
-    const loadingMsg: Message = { id: nextMessageIdRef.current++, role: "ai", content: "", loading: true };
-    setMessages((m) => [...m, loadingMsg]);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id":   user?.id ?? "anonymous",
+          "x-user-role": isAdmin ? "admin" : "user",
+          "x-user-plan": plan ?? "free",
+        },
+        body: JSON.stringify({ feature: "doubt_solver", prompt: text }),
+      });
 
-    await new Promise((r) => setTimeout(r, 1800));
+      const data = await res.json() as Record<string, unknown>;
 
-    const aiMsg: Message = {
-      id: nextMessageIdRef.current++,
-      role: "ai",
-      content: `Great question! Here's a step-by-step solution for: "${text}"`,
-      solution: AI_RESPONSE,
-    };
-    setMessages((m) => [...m.slice(0, -1), aiMsg]);
-    setLoading(false);
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      if (!res.ok) {
+        const isQuota = res.status === 429;
+        const aiMsg: Message = {
+          id: nextMessageIdRef.current++,
+          role: "ai",
+          content: isQuota
+            ? (data.uiMessage as string | undefined) ?? "You've reached your daily AI limit. Upgrade to Pro for more requests."
+            : (data.message as string | undefined) ?? "AI mentor is warming up. Please try again in a moment.",
+          error: true,
+        };
+        setMessages((m) => [...m.slice(0, -1), aiMsg]);
+        return;
+      }
+
+      const aiMsg: Message = {
+        id: nextMessageIdRef.current++,
+        role: "ai",
+        content: (data.text as string | undefined) ?? "I couldn't generate a response. Please try again.",
+        provider: data.provider as string | undefined,
+        cached: Boolean(data.cached),
+      };
+      setMessages((m) => [...m.slice(0, -1), aiMsg]);
+    } catch {
+      const aiMsg: Message = {
+        id: nextMessageIdRef.current++,
+        role: "ai",
+        content: "AI mentor is warming up. Please try again in a moment.",
+        error: true,
+      };
+      setMessages((m) => [...m.slice(0, -1), aiMsg]);
+    } finally {
+      setLoading(false);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
   };
 
   return (
@@ -89,7 +112,7 @@ export default function AIDoubtSolverPage() {
         </div>
         <div className="flex items-center gap-2 glass px-3 py-2 rounded-xl border border-white/5">
           <Sparkles size={14} className="text-neon-blue" />
-          <span className="text-sm text-neon-blue font-medium">GPT-4 Powered</span>
+          <span className="text-sm text-neon-blue font-medium">Groq · Gemini</span>
         </div>
       </div>
 
@@ -169,76 +192,48 @@ export default function AIDoubtSolverPage() {
                       "rounded-2xl px-4 py-3 text-sm",
                       msg.role === "user"
                         ? "bg-gradient-to-br from-neon-blue/30 to-neon-purple/20 border border-neon-blue/20 text-white"
-                        : "bg-white/5 border border-white/8 text-white/80"
+                        : msg.error
+                          ? "bg-red-500/8 border border-red-500/20 text-red-300"
+                          : "bg-white/5 border border-white/8 text-white/80"
                     )}>
                       {msg.loading ? (
                         <div className="flex items-center gap-2">
                           <Loader2 size={16} className="animate-spin text-neon-blue" />
-                          <span className="text-white/50">AI is thinking...</span>
+                          <span className="text-white/50">CATalyst AI is thinking…</span>
+                        </div>
+                      ) : msg.error ? (
+                        <div className="flex items-center gap-2">
+                          <AlertCircle size={15} className="flex-shrink-0 text-red-400" />
+                          <span>{msg.content}</span>
                         </div>
                       ) : (
-                        msg.content
+                        <span className="whitespace-pre-wrap leading-relaxed">{msg.content}</span>
                       )}
                     </div>
 
-                    {/* Solution steps */}
-                    {msg.solution && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        className="w-full space-y-3"
-                      >
-                        {/* Steps */}
-                        <div className="bg-white/3 rounded-xl p-4 border border-white/5">
-                          <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Solution</p>
-                          <div className="space-y-2">
-                            {msg.solution.steps.map((step, i) => (
-                              <div key={i} className="flex items-start gap-2 text-sm text-white/70">
-                                <div className="w-5 h-5 rounded-full bg-neon-blue/20 text-neon-blue text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                                  {i + 1}
-                                </div>
-                                <span className="whitespace-pre-wrap">{step.replace(/\*\*(.*?)\*\*/g, '$1')}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Shortcut */}
-                        {msg.solution.shortcut && (
-                          <div className="bg-yellow-500/8 rounded-xl p-3 border border-yellow-500/20 flex items-start gap-2">
-                            <Lightbulb size={16} className="text-yellow-400 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs font-semibold text-yellow-400 mb-1">CAT Shortcut</p>
-                              <p className="text-xs text-white/60">{msg.solution.shortcut}</p>
-                            </div>
-                          </div>
+                    {/* Footer: provider tag + actions */}
+                    {msg.role === "ai" && !msg.loading && !msg.error && msg.content && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {msg.provider && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-white/25 border border-white/8">
+                            {msg.cached ? "cached · " : ""}{msg.provider}
+                          </span>
                         )}
-
-                        {/* Concept Note */}
-                        {msg.solution.conceptNote && (
-                          <div className="bg-neon-blue/5 rounded-xl p-3 border border-neon-blue/15 flex items-start gap-2">
-                            <BookOpen size={16} className="text-neon-blue flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs font-semibold text-neon-blue mb-1">Concept Note</p>
-                              <p className="text-xs text-white/60">{msg.solution.conceptNote}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Feedback */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-white/25">Was this helpful?</span>
-                          <button className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-green-400 transition-all">
-                            <ThumbsUp size={14} />
-                          </button>
-                          <button className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-red-400 transition-all">
-                            <ThumbsDown size={14} />
-                          </button>
-                          <button className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white transition-all ml-1">
-                            <Copy size={14} />
-                          </button>
-                        </div>
-                      </motion.div>
+                        <span className="text-xs text-white/25">Helpful?</span>
+                        <button className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-green-400 transition-all">
+                          <ThumbsUp size={13} />
+                        </button>
+                        <button className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-red-400 transition-all">
+                          <ThumbsDown size={13} />
+                        </button>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(msg.content)}
+                          className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white transition-all"
+                          aria-label="Copy response"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
