@@ -1,5 +1,13 @@
 // Web Audio API sound engine — zero external dependencies
 
+// Global volume multiplier (0–1). Updated from the auth store on mount.
+let globalVolume = 0.7;
+
+/** Set the global volume. Call this whenever the user changes their sound volume setting. */
+export function setVolume(v: number) {
+  globalVolume = Math.max(0, Math.min(1, v));
+}
+
 let audioCtx: AudioContext | null = null;
 
 function getCtx(): AudioContext | null {
@@ -36,7 +44,8 @@ function playTone(
       gainNode.connect(ctx.destination);
       osc.type = type;
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gainNode.gain.setValueAtTime(gainLevel, ctx.currentTime);
+      const effectiveGain = gainLevel * globalVolume;
+      gainNode.gain.setValueAtTime(effectiveGain, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + duration);

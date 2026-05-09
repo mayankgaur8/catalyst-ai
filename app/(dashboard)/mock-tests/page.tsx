@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import { cn, formatTime } from "@/lib/utils";
 import { SAMPLE_QUESTIONS } from "@/lib/data";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useGameStore } from "@/store/useGameStore";
+import { toast } from "@/lib/toast";
+import { addNotification } from "@/lib/notifications";
 
 type TestState = "list" | "running" | "analysis";
 
@@ -412,6 +416,15 @@ export default function MockTestsPage() {
 
   const handleFinish = useCallback(() => {
     setTestState("analysis");
+    // Award XP, update quest + achievement progress
+    const { incrementMocksTaken, tryUnlockAchievements } = useGameStore.getState();
+    const { updateXP } = useAuthStore.getState();
+    incrementMocksTaken();
+    updateXP(100);
+    toast.xp(100, "Mock Test Complete! 🏆");
+    addNotification("mock", "Mock Analysis Ready", "Your latest mock test analysis is ready. Review your weak areas.", "📊", "/mock-tests");
+    const freshUser = useAuthStore.getState().user;
+    tryUnlockAchievements(freshUser?.xp ?? 0, freshUser?.streak ?? 0, freshUser?.level ?? 1);
   }, []);
 
   if (testState === "running") return <MockTestInterface onFinish={handleFinish} />;

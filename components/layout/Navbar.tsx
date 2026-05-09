@@ -1,7 +1,8 @@
 "use client";
 
-import { Menu, Bell, Search, Zap, ChevronDown, LogOut, Settings, User, Crown } from "lucide-react";
+import { Menu, Bell, Search, Zap, ChevronDown, LogOut, Settings, User, Crown, X } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useNotifStore } from "@/lib/notifications";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,22 +15,37 @@ interface NavbarProps {
   sidebarCollapsed: boolean;
 }
 
-const NOTIFICATIONS = [
-  { id: 1, text: "Your mock test analysis is ready!", time: "2m ago", dot: "bg-neon-blue" },
-  { id: 2, text: "You're on a streak! Keep going!", time: "1h ago", dot: "bg-orange-400" },
-  { id: 3, text: "New RC passage added: Economics", time: "3h ago", dot: "bg-green-400" },
-  { id: 4, text: "AI Study Plan updated for this week", time: "Yesterday", dot: "bg-neon-purple" },
-];
+const NOTIF_DOT: Record<string, string> = {
+  mock:        "bg-neon-blue",
+  streak:      "bg-orange-400",
+  reminder:    "bg-green-400",
+  goal:        "bg-yellow-400",
+  achievement: "bg-neon-purple",
+  system:      "bg-white/50",
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 export default function Navbar({ onMenuClick, sidebarCollapsed }: NavbarProps) {
   const router = useRouter();
   const { user, plan, logout } = useAuthStore();
+  const { notifications, markRead, markAllRead, dismiss } = useNotifStore();
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
   const activePlan = plan ?? "free";
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -87,7 +103,11 @@ export default function Navbar({ onMenuClick, sidebarCollapsed }: NavbarProps) {
             className="relative p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/5 transition-all"
           >
             <Bell size={18} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-neon-blue rounded-full" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-neon-blue rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
 
           <AnimatePresence>
@@ -100,20 +120,74 @@ export default function Navbar({ onMenuClick, sidebarCollapsed }: NavbarProps) {
                 className="absolute right-0 top-full mt-2 w-80 glass-strong rounded-2xl border border-white/10 shadow-card overflow-hidden z-50"
               >
                 <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">Notifications</h3>
-                  <button className="text-xs text-neon-blue hover:text-neon-blue/70">Mark all read</button>
+                  <h3 className="font-semibold text-sm">
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-2 text-xs bg-neon-blue/20 text-neon-blue px-1.5 py-0.5 rounded-full font-bold">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </h3>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="text-xs text-neon-blue hover:text-neon-blue/70 transition-colors"
+                    >
+                      Mark all read
+                    </button>
+                  )}
                 </div>
+
                 <div className="divide-y divide-white/5 max-h-72 overflow-y-auto">
-                  {NOTIFICATIONS.map((n) => (
-                    <div key={n.id} className="p-3 hover:bg-white/5 cursor-pointer transition-colors flex items-start gap-3">
-                      <div className={cn("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", n.dot)} />
-                      <div>
-                        <p className="text-sm text-white/80">{n.text}</p>
-                        <p className="text-xs text-white/30 mt-1">{n.time}</p>
+                  {notifications.length === 0 ? (
+                    <p className="text-center text-white/30 text-sm py-8">No notifications</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          markRead(n.id);
+                          if (n.href) { router.push(n.href); setShowNotifications(false); }
+                        }}
+                        className={cn(
+                          "p-3 hover:bg-white/5 transition-colors flex items-start gap-3 group",
+                          n.href && "cursor-pointer",
+                          !n.read && "bg-white/[0.02]"
+                        )}
+                      >
+                        <div className="flex-shrink-0 mt-0.5 flex items-center gap-1.5">
+                          {!n.read && (
+                            <div className={cn("w-1.5 h-1.5 rounded-full", NOTIF_DOT[n.type] ?? "bg-white/40")} />
+                          )}
+                          <span className="text-lg leading-none">{n.icon}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-sm", n.read ? "text-white/50" : "text-white/85 font-medium")}>
+                            {n.title}
+                          </p>
+                          <p className="text-xs text-white/35 mt-0.5 line-clamp-2">{n.body}</p>
+                          <p className="text-[10px] text-white/25 mt-1">{timeAgo(n.createdAt)}</p>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); dismiss(n.id); }}
+                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-white/30 hover:text-white/70 transition-all p-0.5"
+                        >
+                          <X size={12} />
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
+
+                {notifications.length > 0 && (
+                  <div className="p-2 border-t border-white/5">
+                    <Link href="/settings" onClick={() => setShowNotifications(false)}>
+                      <button className="w-full text-xs text-center text-white/30 hover:text-white/60 py-1 transition-colors">
+                        Notification settings →
+                      </button>
+                    </Link>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -146,7 +220,6 @@ export default function Navbar({ onMenuClick, sidebarCollapsed }: NavbarProps) {
                 transition={{ duration: 0.15 }}
                 className="absolute right-0 top-full mt-2 w-56 glass-strong rounded-2xl border border-white/10 shadow-card overflow-hidden z-50"
               >
-                {/* User info */}
                 <div className="p-4 border-b border-white/5">
                   <p className="font-semibold text-sm">{user?.name}</p>
                   <p className="text-xs text-white/40 mt-0.5">{user?.email}</p>
@@ -159,7 +232,6 @@ export default function Navbar({ onMenuClick, sidebarCollapsed }: NavbarProps) {
                   </span>
                 </div>
 
-                {/* Menu items */}
                 <div className="p-1.5">
                   <Link href="/profile" onClick={() => setShowUserMenu(false)}>
                     <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/70 hover:text-white hover:bg-white/5 transition-all">

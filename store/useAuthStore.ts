@@ -40,6 +40,7 @@ interface AuthState {
   previewPlan: Plan | null;
   // User preferences
   soundEnabled: boolean;
+  soundVolume: number; // 0–100
   notifEnabled: boolean;
 }
 
@@ -58,6 +59,7 @@ interface AuthActions {
   setPreviewPlan: (plan: Plan | null) => void;
   // Preference actions
   setSoundEnabled: (val: boolean) => void;
+  setSoundVolume: (val: number) => void;
   setNotifEnabled: (val: boolean) => void;
 }
 
@@ -81,6 +83,7 @@ const INITIAL_STATE: AuthState = {
   isAdmin: false,
   previewPlan: null,
   soundEnabled: true,
+  soundVolume: 70,
   notifEnabled: true,
 };
 
@@ -174,6 +177,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setSoundEnabled: (val) => set({ soundEnabled: val }),
+      setSoundVolume: (val) => set({ soundVolume: Math.max(0, Math.min(100, val)) }),
       setNotifEnabled: (val) => set({ notifEnabled: val }),
     }),
     {
@@ -190,6 +194,7 @@ export const useAuthStore = create<AuthStore>()(
         isAdmin: state.isAdmin,
         previewPlan: state.previewPlan,
         soundEnabled: state.soundEnabled,
+        soundVolume: state.soundVolume,
         notifEnabled: state.notifEnabled,
       }),
     }

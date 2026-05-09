@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { COLLEGES } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { OnboardingData } from "@/store/useAuthStore";
+import { useGameStore } from "@/store/useGameStore";
 
 const STEPS = [
   { id: 1, title: "Goal Setup", desc: "What are you targeting?" },
@@ -37,7 +38,7 @@ const STUDY_MODES = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { isAuthenticated, plan, hasCompletedOnboarding, completeOnboarding, user } = useAuthStore();
+  const { isAuthenticated, plan, hasCompletedOnboarding, completeOnboarding, addBadge, user } = useAuthStore();
 
   const [step, setStep] = useState(1);
   const [generating, setGenerating] = useState(false);
@@ -67,6 +68,11 @@ export default function OnboardingPage() {
     setGenerating(true);
     await new Promise((r) => setTimeout(r, 2000));
     completeOnboarding({ ...form, examDate: "2025-11-23" });
+    addBadge("First Login");
+    // Attempt to unlock the "First Login" achievement after badge is awarded
+    const { tryUnlockAchievements } = useGameStore.getState();
+    const freshUser = useAuthStore.getState().user;
+    tryUnlockAchievements(freshUser?.xp ?? 0, freshUser?.streak ?? 0, freshUser?.level ?? 1);
     router.push("/dashboard");
   }
 

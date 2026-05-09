@@ -7,10 +7,10 @@ import {
   LayoutDashboard, BookOpen, FileText, Brain,
   Trophy, Calendar, Video, Settings, ChevronLeft,
   Zap, Target, MessageSquare, Star, Crown,
-  BarChart2, Flame, X, LogOut, Lock
+  BarChart2, Flame, X, LogOut, Lock, Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/store/useAuthStore";
+import { useAuthStore, useEffectivePlan } from "@/store/useAuthStore";
 import { canAccess } from "@/lib/features";
 import { PLAN_BADGE_COLORS } from "@/lib/features";
 
@@ -48,9 +48,11 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, plan, logout } = useAuthStore();
+  const { user, plan, logout, isAdmin, previewPlan } = useAuthStore();
+  const effectivePlan = useEffectivePlan();
 
-  const activePlan = plan ?? "free";
+  // For display: show effective plan if admin is previewing, otherwise real plan
+  const activePlan = effectivePlan ?? plan ?? "free";
   const sections = Array.from(new Set(NAV_ITEMS.map((n) => n.section)));
 
   const xpForLevel = 500 * Math.pow(2, (user?.level ?? 1) - 1);
@@ -127,13 +129,23 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{user?.name ?? "User"}</p>
-                  <span className={cn(
-                    "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border capitalize",
-                    PLAN_BADGE_COLORS[activePlan]
-                  )}>
-                    {activePlan === "elite" && <Crown size={9} />}
-                    {PLAN_LABELS[activePlan]}
-                  </span>
+                  {isAdmin && !previewPlan ? (
+                    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border bg-yellow-400/10 text-yellow-400 border-yellow-400/30">
+                      <Shield size={9} /> Admin
+                    </span>
+                  ) : isAdmin && previewPlan ? (
+                    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border bg-yellow-400/10 text-yellow-400 border-yellow-400/30 uppercase font-bold">
+                      Preview: {previewPlan}
+                    </span>
+                  ) : (
+                    <span className={cn(
+                      "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border capitalize",
+                      PLAN_BADGE_COLORS[activePlan]
+                    )}>
+                      {activePlan === "elite" && <Crown size={9} />}
+                      {PLAN_LABELS[activePlan]}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3 text-xs text-white/50">
@@ -175,7 +187,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
               <div className="space-y-0.5">
                 {NAV_ITEMS.filter((n) => n.section === section).map((item) => {
                   const isActive = pathname === item.href;
-                  const isLocked = item.feature !== null && !canAccess(activePlan, item.feature as Parameters<typeof canAccess>[1]);
+                  // Admins are never locked — they use the Plan Simulator to test locked states
+                  const isLocked = !isAdmin && item.feature !== null && !canAccess(activePlan, item.feature as Parameters<typeof canAccess>[1]);
 
                   return (
                     <Link
