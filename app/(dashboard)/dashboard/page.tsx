@@ -9,9 +9,10 @@ import {
   Flame, Trophy, Target, Brain, TrendingUp, BookOpen,
   Calendar, Clock, Star, Award, ChevronRight, Play, ArrowUp,
   CheckCircle, AlertCircle, Sparkles, GraduationCap, Lock,
-  Mic, Users, Video, Crown, BarChart2
+  Mic, Users, Video, Crown, BarChart2, Zap
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useGameStore } from "@/store/useGameStore";
 import { canAccess } from "@/lib/features";
 import { getRandomQuote, cn } from "@/lib/utils";
 import { TOPICS } from "@/lib/data";
@@ -103,6 +104,7 @@ function LockedCard({ title, desc, icon: Icon, plan }: { title: string; desc: st
 
 export default function DashboardPage() {
   const { user, plan, onboardingData } = useAuthStore();
+  const { quests } = useGameStore();
 
   const activePlan = plan ?? "free";
   const targetPercentile = onboardingData?.targetPercentile ?? 95;
@@ -209,6 +211,62 @@ export default function DashboardPage() {
           icon={Award} color="bg-gradient-to-br from-neon-purple/30 to-pink-500/20"
           locked={activePlan === "free" && false} />
       </div>
+
+      {/* Daily Quests */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="glass rounded-2xl p-5 border border-white/5"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Zap size={18} className="text-yellow-400" />
+            <h3 className="font-semibold">Daily Quests</h3>
+          </div>
+          <span className="text-xs text-white/30">
+            {quests.filter((q) => q.completed).length}/{quests.length} complete · resets midnight
+          </span>
+        </div>
+        <div className="h-1.5 bg-white/5 rounded-full mb-4 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${(quests.filter((q) => q.completed).length / quests.length) * 100}%` }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+            className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"
+          />
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          {quests.map((quest) => (
+            <div
+              key={quest.id}
+              className={cn(
+                "flex flex-col gap-1.5 p-3 rounded-xl border transition-all",
+                quest.completed
+                  ? "bg-green-500/10 border-green-500/20"
+                  : "bg-white/3 border-white/5"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-lg">{quest.icon}</span>
+                {quest.completed
+                  ? <CheckCircle size={14} className="text-green-400" />
+                  : <span className="text-xs font-bold text-yellow-400">+{quest.xpReward} XP</span>}
+              </div>
+              <p className={cn("text-xs font-semibold leading-tight", quest.completed ? "text-white/40 line-through" : "text-white/80")}>
+                {quest.title}
+              </p>
+              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all", quest.completed ? "bg-green-400" : "bg-neon-blue")}
+                  style={{ width: `${Math.min((quest.progress / quest.target) * 100, 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-white/25">{quest.progress}/{quest.target}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-3 gap-6">

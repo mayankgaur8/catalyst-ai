@@ -3,15 +3,18 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import {
-  BookOpen, Filter, ChevronRight, CheckCircle, XCircle, Clock,
-  Lightbulb, Brain, Star, Zap, BarChart2, Target, ArrowRight,
-  ChevronDown, Play, Bookmark, Share2, TrendingUp
+  Filter, CheckCircle, XCircle, Clock,
+  Lightbulb, Brain, ArrowRight,
+  ChevronDown, Play, Bookmark
 } from "lucide-react";
 import { cn, getDifficultyColor } from "@/lib/utils";
 import { SAMPLE_QUESTIONS, TOPICS } from "@/lib/data";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useGameStore } from "@/store/useGameStore";
+import { playSound } from "@/lib/sounds";
+import { toast } from "@/lib/toast";
 
 type Section = "qa" | "varc" | "dilr";
-type View = "topics" | "practice" | "explanation";
 
 const SectionBadge = ({ section }: { section: Section }) => (
   <span className={cn(
@@ -27,13 +30,15 @@ const SectionBadge = ({ section }: { section: Section }) => (
 export default function PracticePage() {
   const [activeSection, setActiveSection] = useState<Section>("qa");
   const [activeDifficulty, setActiveDifficulty] = useState("all");
-  const [view, setView] = useState<View>("topics");
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [answered, setAnswered] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, wrong: 0, skipped: 0, time: 0 });
   const [bookmarked, setBookmarked] = useState<number[]>([]);
+
+  const { soundEnabled, updateXP, user } = useAuthStore();
+  const { recordAnswer, tryUnlockAchievements } = useGameStore();
 
   const sectionQuestions = SAMPLE_QUESTIONS.filter(
     (q) => q.section === activeSection && (activeDifficulty === "all" || q.difficulty === activeDifficulty)
@@ -45,11 +50,18 @@ export default function PracticePage() {
     if (answered) return;
     setSelectedAnswer(idx);
     setAnswered(true);
-    if (idx === currentQ.correctAnswer) {
+    const correct = idx === currentQ.correctAnswer;
+    if (correct) {
       setSessionStats((s) => ({ ...s, correct: s.correct + 1 }));
+      playSound("correct", soundEnabled);
+      updateXP(15);
+      toast.xp(15, "Correct Answer!");
     } else {
       setSessionStats((s) => ({ ...s, wrong: s.wrong + 1 }));
+      playSound("wrong", soundEnabled);
     }
+    recordAnswer(correct);
+    tryUnlockAchievements((user?.xp ?? 0) + (correct ? 15 : 0), user?.streak ?? 0, user?.level ?? 1);
   };
 
   const handleNext = () => {
@@ -88,7 +100,7 @@ export default function PracticePage() {
         {sections.map((s) => (
           <button
             key={s}
-            onClick={() => { setActiveSection(s); setCurrentQIndex(0); setView("topics"); }}
+            onClick={() => { setActiveSection(s); setCurrentQIndex(0); }}
             className={cn(
               "px-5 py-2.5 rounded-xl text-sm font-semibold transition-all",
               activeSection === s
@@ -112,7 +124,7 @@ export default function PracticePage() {
               <motion.button
                 key={topic.name}
                 whileHover={{ x: 4 }}
-                onClick={() => setView("practice")}
+                onClick={() => setCurrentQIndex(0)}
                 className="w-full glass rounded-xl p-4 border border-white/5 hover:border-white/10 text-left transition-all card-hover"
               >
                 <div className="flex items-center justify-between mb-2">

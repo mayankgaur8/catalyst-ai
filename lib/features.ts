@@ -29,7 +29,7 @@ export type Feature =
   | "MBA_PREDICTOR"
   | "DAILY_ROADMAP";
 
-const PLAN_FEATURES: Record<Plan, Set<Feature>> = {
+export const PLAN_FEATURES: Record<Plan, Set<Feature>> = {
   free: new Set<Feature>([
     "DASHBOARD",
     "PRACTICE_BASIC",
