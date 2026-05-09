@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { X, AlertCircle, Bookmark, ThumbsUp, FileText } from "lucide-react";
+import { useEffect, useRef, useCallback, useState, useReducer } from "react";
+import {
+  X, AlertCircle, Bookmark, BookmarkCheck, CheckCircle2,
+  ExternalLink, FileText, Lightbulb, ChevronDown, ChevronUp,
+  RotateCcw, Loader2, ThumbsUp,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoLesson } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
@@ -104,7 +108,8 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
         const duration = player.getDuration();
         if (!duration) return;
         const pct = (current / duration) * 100;
-        updateProgress(video.id, pct);
+        // Approximate watched seconds as current time (simple, not range-based for now)
+        updateProgress(video.id, pct, Math.round(current));
 
         // 70% milestone — XP + sound + toast + analytics
         if (pct >= 70 && !rewardedRef.current) {
@@ -162,7 +167,7 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
               try {
                 const current  = e.target.getCurrentTime();
                 const duration = e.target.getDuration();
-                if (duration) updateProgress(video.id, (current / duration) * 100);
+                if (duration) updateProgress(video.id, (current / duration) * 100, Math.round(current));
               } catch { /* ignore */ }
             }
           },

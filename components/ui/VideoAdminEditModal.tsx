@@ -14,6 +14,8 @@ interface Props {
 }
 
 const CATEGORIES: VideoCategory[] = ["Strategy", "QA", "VARC", "DILR"];
+const ACCESS_LEVELS = ["free", "pro", "elite"];
+const STATUSES = ["draft", "published"];
 
 export default function VideoAdminEditModal({ video, isNew, onClose }: Props) {
   const { addVideo, editVideo } = useVideoStore();
@@ -99,16 +101,26 @@ export default function VideoAdminEditModal({ video, isNew, onClose }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Access">
-              <select value={form.access} onChange={(e) => set("access", e.target.value as VideoAccess)} className={cn(input(), "cursor-pointer")}>
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
+              <select value={form.access} onChange={(e) => set("access", e.target.value as any)} className={cn(input(), "cursor-pointer")}>
+                {ACCESS_LEVELS.map((level) => <option key={level} value={level}>{level === "pro" ? "Pro" : level === "elite" ? "Elite" : "Free"}</option>)}
               </select>
             </Field>
+            <Field label="Status">
+              <select value={form.status ?? "draft"} onChange={(e) => set("status", e.target.value as any)} className={cn(input(), "cursor-pointer")}>
+                {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Featured">
               <select value={form.featured ? "yes" : "no"} onChange={(e) => set("featured", e.target.value === "yes")} className={cn(input(), "cursor-pointer")}>
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
               </select>
+            </Field>
+            <Field label="">
+              <div className="text-xs text-white/25 py-2">Video will be included in results</div>
             </Field>
           </div>
 

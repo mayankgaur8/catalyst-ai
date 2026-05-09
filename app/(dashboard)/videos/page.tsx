@@ -112,7 +112,7 @@ export default function VideosPage() {
             <span className="font-semibold">Admin mode</span>
             <span className="text-yellow-400/60">— hover cards to edit, reorder, or delete. All access bypassed.</span>
             <button
-              onClick={() => setEditTarget({ id: `v${Date.now()}`, youtubeId: "", title: "", instructor: "", description: "", duration: "", views: "0", rating: 4.5, category: "Strategy", access: "free", tags: [], featured: false, order: allVideos.length })}
+              onClick={() => setEditTarget({ id: `v${Date.now()}`, youtubeId: "", title: "", instructor: "", description: "", duration: "", views: "0", rating: 4.5, category: "Strategy", access: "free", tags: [], featured: false, order: allVideos.length, status: "draft", deletedAt: null })}
               className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/20 border border-yellow-400/30 rounded-lg hover:bg-yellow-400/30 transition-all font-semibold"
             >
               <PlusCircle size={13} /> Add video
