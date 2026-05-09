@@ -2,29 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeAI } from "@/lib/ai/aiRouter";
 import { getQuotaStatus } from "@/lib/ai/quota";
 import { getRecentLogs } from "@/lib/ai/logger";
-import type { AIFeature, AIUserPlan } from "@/lib/ai/types";
-import { AIQuotaExceededError, AIAllProvidersFailedError } from "@/lib/ai/types";
+import { extractSecureUser } from "@/lib/ai/session";
+import { checkRateLimit } from "@/lib/ai/rateLimiter";
+import { filterPrompt } from "@/lib/ai/contentFilter";
+import { getMetricsSummary } from "@/lib/ai/metrics";
+import { getAllHealth } from "@/lib/ai/circuitBreaker";
+import type { AIFeature } from "@/lib/ai/types";
+import {
+  AIQuotaExceededError,
+  AIAllProvidersFailedError,
+  AIRateLimitError,
+} from "@/lib/ai/types";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const VALID_FEATURES = new Set<AIFeature>([
   "doubt_solver", "video_summary", "quiz_generation",
   "study_planner", "mock_analysis", "weak_area_recommendation", "daily_motivation",
 ]);
 
-function extractAuth(req: NextRequest): { userId: string; plan: AIUserPlan; isAdmin: boolean } {
-  const userId  = req.headers.get("x-user-id")   ?? "anonymous";
-  const role    = req.headers.get("x-user-role")  ?? "user";
-  const rawPlan = req.headers.get("x-user-plan")  ?? "free";
-  const isAdmin = role === "admin";
-  const plan    = isAdmin ? "admin" : (rawPlan as AIUserPlan);
-  return { userId, plan, isAdmin };
-}
-
 // ── POST /api/ai — main inference endpoint ────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { userId, plan, isAdmin } = extractAuth(req);
+  const { userId, plan, isAdmin } = extractSecureUser(req);
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+
+  try {
+    await checkRateLimit(ip, userId, plan);
+  } catch (err) {
+    if (err instanceof AIRateLimitError) {
+      return NextResponse.json(
+        { error: "rate_limited", message: "Too many requests. Please slow down.", windowType: err.windowType },
+        { status: 429 }
+      );
+    }
+    throw err;
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -49,9 +62,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (prompt.length > 4000) {
+  const filterResult = filterPrompt(prompt);
+  if (filterResult.blocked) {
     return NextResponse.json(
-      { error: "prompt_too_long", message: "prompt must not exceed 4000 characters" },
+      { error: "content_blocked", reason: filterResult.reason, message: "Your request was blocked by the content filter." },
       { status: 400 }
     );
   }
@@ -64,14 +78,17 @@ export async function POST(req: NextRequest) {
       userId,
       plan,
       isAdmin,
+      ipAddress: ip,
     });
 
     return NextResponse.json({
-      text:          result.text,
-      provider:      result.provider,
-      latencyMs:     result.latencyMs,
-      tokenEstimate: result.tokenEstimate,
-      cached:        result.cached,
+      text:             result.text,
+      provider:         result.provider,
+      latencyMs:        result.latencyMs,
+      tokenEstimate:    result.tokenEstimate,
+      costUSD:          result.costUSD,
+      cached:           result.cached,
+      fallbackAttempts: result.fallbackAttempts,
     });
 
   } catch (err) {
@@ -90,10 +107,9 @@ export async function POST(req: NextRequest) {
     if (err instanceof AIAllProvidersFailedError) {
       return NextResponse.json(
         {
-          error:     "service_unavailable",
-          message:   "AI mentor is warming up. Please try again in a moment.",
-          // Only expose provider details outside production for debugging
-          details:   process.env.NODE_ENV !== "production" ? err.errors : undefined,
+          error:   "service_unavailable",
+          message: "AI mentor is warming up. Please try again in a moment.",
+          details: process.env.NODE_ENV !== "production" ? err.errors : undefined,
         },
         { status: 503 }
       );
@@ -104,14 +120,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ── GET /api/ai — quota status + admin log viewer ─────────────────────────────
+// ── GET /api/ai — quota, logs, metrics, health ────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  const { userId, plan, isAdmin } = extractAuth(req);
+  const { userId, plan, isAdmin } = extractSecureUser(req);
   const type = new URL(req.url).searchParams.get("type");
 
   if (type === "quota") {
-    const status = getQuotaStatus(userId, plan);
+    const status = await getQuotaStatus(userId, plan);
     return NextResponse.json({ ...status, plan });
   }
 
@@ -122,8 +138,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ logs: getRecentLogs(limit) });
   }
 
+  if (type === "metrics") {
+    if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    return NextResponse.json({ metrics: getMetricsSummary() });
+  }
+
+  if (type === "health") {
+    if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    return NextResponse.json({ health: getAllHealth() });
+  }
+
   return NextResponse.json(
-    { error: "bad_request", message: 'Use ?type=quota or ?type=logs (admin only)' },
+    { error: "bad_request", message: "Use ?type=quota, ?type=logs, ?type=metrics, or ?type=health (admin only)" },
     { status: 400 }
   );
 }

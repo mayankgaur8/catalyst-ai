@@ -1,20 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock all four providers before any imports resolve ────────────────────────
-// Vitest hoists vi.mock() calls, so these run before module initialization.
-
 vi.mock("@/lib/ai/providers/groq", () => ({ callGroq: vi.fn() }));
 vi.mock("@/lib/ai/providers/gemini", () => ({ callGemini: vi.fn() }));
 vi.mock("@/lib/ai/providers/openrouter", () => ({ callOpenRouter: vi.fn() }));
 vi.mock("@/lib/ai/providers/ollama", () => ({ callOllama: vi.fn() }));
 
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
-
 import { routeAI } from "@/lib/ai/aiRouter";
 import { _clearQuotaForTest, _setDailyUsageForTest } from "@/lib/ai/quota";
 import { clearCache } from "@/lib/ai/cache";
+import { _resetForTest as resetCircuitBreaker } from "@/lib/ai/circuitBreaker";
+import { _resetForTest as resetMetrics } from "@/lib/ai/metrics";
 import { AIAllProvidersFailedError, AIProviderError, AIQuotaExceededError } from "@/lib/ai/types";
-
 import { callGroq } from "@/lib/ai/providers/groq";
 import { callGemini } from "@/lib/ai/providers/gemini";
 import { callOpenRouter } from "@/lib/ai/providers/openrouter";
@@ -44,7 +42,8 @@ const PROVIDER_OK = { text: "The answer is 1.", tokenEstimate: 120 };
 beforeEach(() => {
   _clearQuotaForTest();
   clearCache();
-  // Guarantee a consistent provider order for every test
+  resetCircuitBreaker();
+  resetMetrics();
   process.env.AI_PROVIDER_ORDER = "groq,gemini,openrouter,ollama";
 });
 
@@ -70,9 +69,7 @@ describe("routeAI", () => {
 
   // ── 2. Groq failure → Gemini fallback ───────────────────────────────────────
   it("falls back to Gemini when Groq throws an error", async () => {
-    vi.mocked(callGroq).mockRejectedValue(
-      new AIProviderError("Groq API rate-limited", "groq")
-    );
+    vi.mocked(callGroq).mockRejectedValue(new AIProviderError("Groq API rate-limited", "groq"));
     vi.mocked(callGemini).mockResolvedValue({ text: "Gemini answer", tokenEstimate: 95 });
 
     const result = await routeAI(FREE_REQUEST);
@@ -94,7 +91,6 @@ describe("routeAI", () => {
 
     await expect(routeAI(FREE_REQUEST)).rejects.toBeInstanceOf(AIAllProvidersFailedError);
 
-    // Every provider must have been attempted exactly once
     expect(callGroq).toHaveBeenCalledOnce();
     expect(callGemini).toHaveBeenCalledOnce();
     expect(callOpenRouter).toHaveBeenCalledOnce();
@@ -116,10 +112,8 @@ describe("routeAI", () => {
   });
 
   // ── 4. Timeout handling ──────────────────────────────────────────────────────
-  it("treats AbortError (timeout) as a non-fatal error and tries the next provider", async () => {
-    vi.mocked(callGroq).mockRejectedValue(
-      new AIProviderError("Groq request timed out", "groq", true)  // isTimeout=true
-    );
+  it("treats timeout as non-fatal and tries the next provider", async () => {
+    vi.mocked(callGroq).mockRejectedValue(new AIProviderError("Groq request timed out", "groq", true));
     vi.mocked(callGemini).mockResolvedValue({ text: "Gemini saved it", tokenEstimate: 80 });
 
     const result = await routeAI(FREE_REQUEST);
@@ -144,18 +138,16 @@ describe("routeAI", () => {
 
   // ── 5. Quota exceeded ────────────────────────────────────────────────────────
   it("throws AIQuotaExceededError when the free daily limit is reached", async () => {
-    // Free plan limit = 10 — exhaust it
-    _setDailyUsageForTest(FREE_REQUEST.userId, 10);
+    await _setDailyUsageForTest(FREE_REQUEST.userId, 10);
 
     await expect(routeAI(FREE_REQUEST)).rejects.toBeInstanceOf(AIQuotaExceededError);
 
-    // No provider should have been called
     expect(callGroq).not.toHaveBeenCalled();
     expect(callGemini).not.toHaveBeenCalled();
   });
 
   it("AIQuotaExceededError carries the correct user and plan", async () => {
-    _setDailyUsageForTest(FREE_REQUEST.userId, 10);
+    await _setDailyUsageForTest(FREE_REQUEST.userId, 10);
 
     let err!: AIQuotaExceededError;
     try { await routeAI(FREE_REQUEST); } catch (e) { err = e as AIQuotaExceededError; }
@@ -168,7 +160,7 @@ describe("routeAI", () => {
 
   // ── 6. Admin bypasses quota ──────────────────────────────────────────────────
   it("lets admin through even when their usage counter is at the free limit", async () => {
-    _setDailyUsageForTest(ADMIN_REQUEST.userId, 10);
+    await _setDailyUsageForTest(ADMIN_REQUEST.userId, 10);
     vi.mocked(callGroq).mockResolvedValue({ text: "Admin answer", tokenEstimate: 50 });
 
     const result = await routeAI(ADMIN_REQUEST);
@@ -179,7 +171,7 @@ describe("routeAI", () => {
 
   it("admin with isAdmin=false but plan=admin also bypasses quota", async () => {
     const request = { ...FREE_REQUEST, plan: "admin" as const, isAdmin: false };
-    _setDailyUsageForTest(request.userId, 999);
+    await _setDailyUsageForTest(request.userId, 999);
     vi.mocked(callGroq).mockResolvedValue(PROVIDER_OK);
 
     const result = await routeAI(request);
@@ -190,15 +182,12 @@ describe("routeAI", () => {
   it("returns a cached response without calling any provider on the second request", async () => {
     vi.mocked(callGroq).mockResolvedValue(PROVIDER_OK);
 
-    // First call — should hit Groq and write to cache
     const first = await routeAI(FREE_REQUEST);
     expect(first.cached).toBe(false);
     expect(callGroq).toHaveBeenCalledOnce();
 
-    // Clear all mock call counts (but NOT the in-process cache)
     vi.clearAllMocks();
 
-    // Second call — same feature + prompt → should be served from cache
     const second = await routeAI(FREE_REQUEST);
 
     expect(second.cached).toBe(true);
@@ -210,7 +199,6 @@ describe("routeAI", () => {
   });
 
   it("does not cache personalized features (mock_analysis)", async () => {
-    // mock_analysis has free cap=2, so two requests are allowed
     const req = { ...FREE_REQUEST, feature: "mock_analysis" as const };
     vi.mocked(callGroq).mockResolvedValue(PROVIDER_OK);
 
@@ -220,7 +208,6 @@ describe("routeAI", () => {
 
     const second = await routeAI(req);
 
-    // mock_analysis is never cached — Groq must have been called again
     expect(second.cached).toBe(false);
     expect(callGroq).toHaveBeenCalledOnce();
   });
@@ -236,5 +223,28 @@ describe("routeAI", () => {
 
     expect(result.cached).toBe(false);
     expect(callGroq).toHaveBeenCalledOnce();
+  });
+
+  // ── 8. Cost and token fields ─────────────────────────────────────────────────
+  it("result includes costUSD, inputTokens, outputTokens, fallbackAttempts", async () => {
+    vi.mocked(callGroq).mockResolvedValue(PROVIDER_OK);
+
+    const result = await routeAI(FREE_REQUEST);
+
+    expect(typeof result.costUSD).toBe("number");
+    expect(result.costUSD).toBeGreaterThanOrEqual(0);
+    expect(typeof result.inputTokens).toBe("number");
+    expect(typeof result.outputTokens).toBe("number");
+    expect(result.fallbackAttempts).toBe(0);
+  });
+
+  it("fallbackAttempts increments for each failed provider", async () => {
+    vi.mocked(callGroq).mockRejectedValue(new AIProviderError("down", "groq"));
+    vi.mocked(callGemini).mockResolvedValue({ text: "fallback answer", tokenEstimate: 50 });
+
+    const result = await routeAI(FREE_REQUEST);
+
+    expect(result.fallbackAttempts).toBe(1);
+    expect(result.provider).toBe("gemini");
   });
 });

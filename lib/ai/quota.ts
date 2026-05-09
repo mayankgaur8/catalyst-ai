@@ -1,5 +1,6 @@
 import type { AIFeature, AIUserPlan } from "./types";
 import { AIQuotaExceededError } from "./types";
+import { storage } from "./storage";
 
 // ── Daily limits by plan ──────────────────────────────────────────────────────
 
@@ -10,8 +11,7 @@ const DAILY_TOTALS: Record<AIUserPlan, number> = {
   admin: Infinity,
 };
 
-// Per-feature sub-quotas (a subset of the daily total).
-// undefined means "no separate per-feature cap beyond the daily total".
+// Per-feature sub-quotas. undefined = no separate per-feature cap.
 const FEATURE_CAPS: Record<AIFeature, Partial<Record<AIUserPlan, number>>> = {
   quiz_generation:          { free: 2,  pro: 10,  elite: 30 },
   video_summary:            { free: 3,  pro: 15,  elite: 50 },
@@ -22,23 +22,30 @@ const FEATURE_CAPS: Record<AIFeature, Partial<Record<AIUserPlan, number>>> = {
   daily_motivation:         {},
 };
 
-// ── In-memory usage store ─────────────────────────────────────────────────────
-// key: "userId:YYYY-MM-DD"           → total requests today
-// key: "userId:YYYY-MM-DD:feature"   → per-feature requests today
-
-const dailyUsage   = new Map<string, number>();
-const featureUsage = new Map<string, number>();
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 }
 
 function dailyKey(userId: string): string {
-  return `${userId}:${today()}`;
+  return `quota:daily:${userId}:${today()}`;
 }
 
 function featureKey(userId: string, feature: AIFeature): string {
-  return `${userId}:${today()}:${feature}`;
+  return `quota:feature:${userId}:${today()}:${feature}`;
+}
+
+function secondsUntilMidnight(): number {
+  const now      = new Date();
+  const midnight = new Date(now);
+  midnight.setUTCHours(24, 0, 0, 0);
+  return Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+}
+
+async function getCount(key: string): Promise<number> {
+  const raw = await storage.get(key);
+  return raw ? parseInt(raw, 10) : 0;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -48,48 +55,48 @@ function featureKey(userId: string, feature: AIFeature): string {
  * Throws AIQuotaExceededError if any limit is exceeded.
  * Admin and plan==="admin" always pass through.
  */
-export function checkAndConsumeQuota(
+export async function checkAndConsumeQuota(
   userId: string,
   plan: AIUserPlan,
   feature: AIFeature,
   isAdmin: boolean
-): void {
+): Promise<void> {
   if (isAdmin || plan === "admin") return;
 
-  const dKey  = dailyKey(userId);
-  const used  = dailyUsage.get(dKey) ?? 0;
-  const limit = DAILY_TOTALS[plan];
+  const ttl  = secondsUntilMidnight();
+  const dKey = dailyKey(userId);
 
+  const used  = await getCount(dKey);
+  const limit = DAILY_TOTALS[plan];
   if (used >= limit) throw new AIQuotaExceededError(userId, plan, feature);
 
   const featureCap = FEATURE_CAPS[feature][plan];
   if (featureCap !== undefined) {
     const fKey  = featureKey(userId, feature);
-    const fUsed = featureUsage.get(fKey) ?? 0;
+    const fUsed = await getCount(fKey);
     if (fUsed >= featureCap) throw new AIQuotaExceededError(userId, plan, feature);
-    featureUsage.set(fKey, fUsed + 1);
+    await storage.increment(fKey, ttl);
   }
 
-  dailyUsage.set(dKey, used + 1);
+  await storage.increment(dKey, ttl);
 }
 
-export function getQuotaStatus(
+export async function getQuotaStatus(
   userId: string,
   plan: AIUserPlan
-): { used: number; limit: number; remaining: number } {
+): Promise<{ used: number; limit: number; remaining: number }> {
   const limit = DAILY_TOTALS[plan];
-  const used  = dailyUsage.get(dailyKey(userId)) ?? 0;
+  const used  = await getCount(dailyKey(userId));
   const cap   = limit === Infinity ? 999999 : limit;
   return { used, limit: cap, remaining: Math.max(0, cap - used) };
 }
 
-// ── Test helpers (never call in production code) ──────────────────────────────
+// ── Test helpers — never call in production code ──────────────────────────────
 
 export function _clearQuotaForTest(): void {
-  dailyUsage.clear();
-  featureUsage.clear();
+  (storage as { clearSync?: () => void }).clearSync?.();
 }
 
-export function _setDailyUsageForTest(userId: string, count: number): void {
-  dailyUsage.set(`${userId}:${today()}`, count);
+export async function _setDailyUsageForTest(userId: string, count: number): Promise<void> {
+  await storage.set(dailyKey(userId), String(count), secondsUntilMidnight());
 }
