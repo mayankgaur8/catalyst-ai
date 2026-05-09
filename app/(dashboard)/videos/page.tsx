@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import {
   Search, Play, Star, Eye, RotateCcw, ShieldCheck,
-  PlusCircle, ChevronRight,
+  PlusCircle, ChevronRight, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VideoLesson, VideoCategory, CATEGORY_COLORS, ytThumbnail } from "@/lib/videos";
@@ -45,6 +45,17 @@ export default function VideosPage() {
     () => allVideos.find((v) => v.featured) ?? allVideos[0],
     [allVideos]
   );
+
+  const recentlyWatched = useMemo(() => {
+    return allVideos
+      .filter((v) => history[v.id]?.lastWatched)
+      .sort((a, b) => {
+        const ta = new Date(history[a.id]?.lastWatched ?? 0).getTime();
+        const tb = new Date(history[b.id]?.lastWatched ?? 0).getTime();
+        return tb - ta;
+      })
+      .slice(0, 4);
+  }, [allVideos, history]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -106,6 +117,28 @@ export default function VideosPage() {
             >
               <PlusCircle size={13} /> Add video
             </button>
+          </div>
+        )}
+
+        {/* ── Recently Watched ──────────────────────────────────────────────── */}
+        {recentlyWatched.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-white/40 uppercase tracking-wider">
+                <Clock size={11} /> Recently Watched
+              </span>
+              <div className="flex-1 h-px bg-white/5" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {recentlyWatched.map((v) => (
+                <RecentVideoRow
+                  key={v.id}
+                  video={v}
+                  progressPct={history[v.id]?.progressPct ?? 0}
+                  onPlay={setActiveVideo}
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -220,6 +253,68 @@ export default function VideosPage() {
         />
       )}
     </>
+  );
+}
+
+// ── Recently Watched row card ──────────────────────────────────────────────────
+
+function RecentVideoRow({
+  video,
+  progressPct,
+  onPlay,
+}: {
+  video: VideoLesson;
+  progressPct: number;
+  onPlay: (v: VideoLesson) => void;
+}) {
+  const isCompleted = progressPct >= 95;
+  const thumbnailUrl = video.youtubeId ? ytThumbnail(video.youtubeId, "hqdefault") : null;
+
+  return (
+    <button
+      onClick={() => onPlay(video)}
+      className="group relative rounded-xl overflow-hidden border border-white/8 hover:border-neon-blue/30 bg-dark-700 transition-all hover:shadow-[0_0_20px_rgba(0,212,255,0.15)] text-left"
+      aria-label={`Resume ${video.title}`}
+    >
+      {/* Thumbnail */}
+      <div className="relative aspect-video bg-dark-600">
+        {thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnailUrl}
+            alt={video.title}
+            className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity"
+            loading="lazy"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-2xl font-black text-white/10">{video.category[0]}</span>
+          </div>
+        )}
+        {/* Play overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+          <div className="w-8 h-8 rounded-full bg-neon-blue/90 flex items-center justify-center shadow-[0_0_16px_rgba(0,212,255,0.6)]">
+            <Play size={12} className="ml-0.5" fill="white" />
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
+          <div
+            className={cn("h-full transition-all", isCompleted ? "bg-green-400" : "bg-neon-blue")}
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+      {/* Title + progress label */}
+      <div className="px-2.5 py-2">
+        <p className="text-[11px] font-medium leading-snug line-clamp-2 text-white/70 group-hover:text-white transition-colors">
+          {video.title}
+        </p>
+        <p className="text-[10px] text-white/30 mt-0.5">
+          {isCompleted ? "Completed" : `${Math.round(progressPct)}% watched`}
+        </p>
+      </div>
+    </button>
   );
 }
 

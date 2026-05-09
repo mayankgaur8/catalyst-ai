@@ -15,6 +15,8 @@ export interface VideoLesson {
   tags: string[];
   featured: boolean;
   order: number;
+  /** Custom toast message shown when +XP is awarded at 70% watch completion */
+  xpToastMessage?: string;
 }
 
 export const CATEGORY_COLORS: Record<VideoCategory, string> = {
@@ -47,18 +49,23 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v2",
-    youtubeId: null,
+    youtubeId: "45Kw2LC0HFE",
     title: "Number System: Complete Masterclass + Tricks",
     instructor: "Rajiv Mehta",
-    description: "A complete guide to Number System for CAT — from basics to advanced tricks used by toppers.",
+    description:
+      "Master CAT Number Systems from basics to advanced tricks including divisibility rules, HCF & LCM, remainders, modular arithmetic, cyclicity, unit digit concepts, prime numbers, and CAT-level shortcut techniques. Designed for aspirants targeting 99+ percentile with speed-building methods and exam-oriented problem solving.",
     duration: "1:24:15",
     views: "45K",
     rating: 4.8,
     category: "QA",
     access: "free",
-    tags: ["Number System", "QA", "CAT Math", "Shortcuts"],
+    tags: [
+      "CAT", "QA", "Number System", "Quant", "Remainder Theorem",
+      "HCF", "LCM", "Modular Arithmetic", "CAT 2024", "CAT Preparation",
+    ],
     featured: false,
     order: 1,
+    xpToastMessage: "🔥 Number mastery unlocked! Keep pushing toward 99+ percentile.",
   },
   {
     id: "v3",

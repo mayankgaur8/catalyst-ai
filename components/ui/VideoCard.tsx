@@ -53,9 +53,9 @@ export default function VideoCard({
     >
       {/* Thumbnail */}
       <div className="relative aspect-video bg-dark-700 overflow-hidden">
-        {/* Skeleton */}
+        {/* Skeleton shimmer while thumbnail loads */}
         {!thumbLoaded && thumbnailUrl && (
-          <div className="absolute inset-0 bg-gradient-to-br from-dark-600 to-dark-700 animate-pulse" />
+          <div className="absolute inset-0 skeleton" />
         )}
 
         {/* Placeholder when no YouTube ID */}
@@ -100,7 +100,7 @@ export default function VideoCard({
             "w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-200",
             "opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100",
             isFree || isAdmin
-              ? "bg-neon-blue/80 shadow-[0_0_24px_rgba(0,212,255,0.5)]"
+              ? "bg-neon-blue/80 neon-play-btn"
               : "bg-white/15"
           )}>
             {isFree || isAdmin

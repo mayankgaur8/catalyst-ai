@@ -7,6 +7,8 @@ import { VideoLesson } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "@/lib/toast";
+import { playSound } from "@/lib/sounds";
+import { trackVideoEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 // Minimal inline YouTube IFrame API types (avoids needing @types/youtube)
@@ -71,9 +73,16 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
   const playerRef          = useRef<YTPlayerInstance | null>(null);
   const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null);
   const rewardedRef        = useRef(false);
+  const startedRef         = useRef(false);
+  const completedRef       = useRef(false);
 
   const { updateProgress, markXpAwarded, history } = useVideoStore();
-  const { updateXP, soundEnabled } = useAuthStore();
+  const { updateXP, soundEnabled }                 = useAuthStore();
+
+  // Keep a ref so the polling callback always reads the latest value
+  // without needing to be in the useCallback dep array.
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
   const prevRecord = history[video.id];
 
@@ -97,17 +106,29 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
         const pct = (current / duration) * 100;
         updateProgress(video.id, pct);
 
+        // 70% milestone — XP + sound + toast + analytics
         if (pct >= 70 && !rewardedRef.current) {
           rewardedRef.current = true;
           markXpAwarded(video.id);
           updateXP(XP_REWARD);
-          toast.xp(XP_REWARD, "🔥 Great job! Strategy mastery starts with consistency.");
+          if (soundEnabledRef.current) playSound("xp", true);
+          toast.xp(
+            XP_REWARD,
+            video.xpToastMessage ?? "🔥 Great job! Keep pushing toward 99+ percentile."
+          );
+          trackVideoEvent("VIDEO_70_PERCENT_REACHED", video.id, { pct: Math.round(pct) });
+        }
+
+        // Completion milestone (95%)
+        if (pct >= 95 && !completedRef.current) {
+          completedRef.current = true;
+          trackVideoEvent("VIDEO_COMPLETED", video.id, { pct: Math.round(pct) });
         }
       } catch {
         // player may not be ready yet
       }
     }, POLL_MS);
-  }, [video.id, updateProgress, markXpAwarded, updateXP, stopPolling]);
+  }, [video.id, video.xpToastMessage, updateProgress, markXpAwarded, updateXP, stopPolling]);
 
   useEffect(() => {
     if (!video.youtubeId) return;
@@ -129,10 +150,15 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
         events: {
           onStateChange(e) {
             if (e.data === window.YT.PlayerState.PLAYING) {
+              // Fire VIDEO_STARTED once per modal open
+              if (!startedRef.current) {
+                startedRef.current = true;
+                trackVideoEvent("VIDEO_STARTED", video.id);
+              }
               startPolling();
             } else {
               stopPolling();
-              // snapshot progress on pause / end
+              // Snapshot progress on pause / end
               try {
                 const current  = e.target.getCurrentTime();
                 const duration = e.target.getDuration();
@@ -238,7 +264,10 @@ export default function VideoModal({ video, onClose }: VideoModalProps) {
                     </div>
                     <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                       <div
-                        className={cn("h-full rounded-full transition-all", progressPct >= 70 ? "bg-green-400" : "bg-neon-blue")}
+                        className={cn(
+                          "h-full rounded-full transition-all duration-700",
+                          progressPct >= 70 ? "bg-green-400" : "bg-neon-blue"
+                        )}
                         style={{ width: `${progressPct}%` }}
                       />
                     </div>

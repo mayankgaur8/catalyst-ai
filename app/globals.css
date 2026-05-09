@@ -98,8 +98,11 @@
   }
 
   .card-hover:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 212, 255, 0.1);
+    transform: translateY(-4px) scale(1.02);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.5),
+      0 0 30px rgba(0, 212, 255, 0.2),
+      0 0 60px rgba(0, 212, 255, 0.06);
   }
 
   .bg-noise {
@@ -228,4 +231,14 @@ input[type="range"]::-moz-range-thumb {
 
 .bg-dark-600 {
   background-color: #12122a;
+}
+
+/* Animated neon play button — pulses when the card is hovered */
+@keyframes neon-play-pulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(0, 212, 255, 0.5); }
+  50%       { box-shadow: 0 0 40px rgba(0, 212, 255, 0.9), 0 0 70px rgba(0, 212, 255, 0.3); }
+}
+
+.group:hover .neon-play-btn {
+  animation: neon-play-pulse 1.6s ease-in-out infinite;
 }
