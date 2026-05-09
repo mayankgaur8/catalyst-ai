@@ -1,0 +1,317 @@
+// CATalyst AI — Production PostgreSQL schema
+// Setup: npx prisma migrate dev --name init
+// Requires: DATABASE_URL in .env.local
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String
+  avatarUrl   String?
+  role        Role     @default(USER)
+  xp          Int      @default(0)
+  streak      Int      @default(0)
+  level       Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscription  Subscription?
+  videoProgress VideoProgress[]
+  watchSessions VideoWatchSession[]
+  xpEvents      XpEvent[]
+  quizAttempts  QuizAttempt[]
+  savedVideos   SavedVideo[]
+  playlists     Playlist[]
+  analyticsEvents AnalyticsEvent[]
+  auditLogs     AdminAuditLog[]  @relation("AuditActor")
+
+  @@index([email])
+  @@index([role])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Subscription {
+  id             String           @id @default(cuid())
+  userId         String           @unique
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan           Plan             @default(FREE)
+  status         SubscriptionStatus @default(ACTIVE)
+  activatedAt    DateTime         @default(now())
+  expiresAt      DateTime?
+  razorpaySubId  String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([plan, status])
+}
+
+enum Plan {
+  FREE
+  PRO
+  ELITE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  TRIAL
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIDEOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Video {
+  id             String        @id @default(cuid())
+  youtubeId      String?
+  title          String
+  instructor     String
+  description    String        @db.Text
+  aiSummary      String?       @db.Text
+  keyTakeaways   String[]
+  duration       String
+  views          String
+  rating         Float         @default(4.5)
+  category       VideoCategory
+  access         VideoAccess   @default(FREE)
+  status         VideoStatus   @default(DRAFT)
+  featured       Boolean       @default(false)
+  order          Int           @default(0)
+  tags           String[]
+  xpToastMessage String?
+  thumbnailUrl   String?
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  progress       VideoProgress[]
+  watchSessions  VideoWatchSession[]
+  quizQuestions  QuizQuestion[]
+  quizAttempts   QuizAttempt[]
+  savedBy        SavedVideo[]
+  playlistItems  PlaylistItem[]
+  analyticsEvents AnalyticsEvent[]
+  auditLogs      AdminAuditLog[]
+
+  @@index([category])
+  @@index([status, deletedAt])
+  @@index([access])
+  @@index([featured])
+  @@index([order])
+}
+
+enum VideoCategory {
+  QA
+  VARC
+  DILR
+  STRATEGY
+}
+
+enum VideoAccess {
+  FREE
+  PRO
+  ELITE
+}
+
+enum VideoStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WATCH PROGRESS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VideoProgress {
+  id             String    @id @default(cuid())
+  userId         String
+  videoId        String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video          Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  progressPct    Float     @default(0)
+  watchedSeconds Int       @default(0)
+  xpAwarded      Boolean   @default(false)
+  completedAt    DateTime?
+  lastWatchedAt  DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+  @@index([progressPct])
+}
+
+model VideoWatchSession {
+  id           String   @id @default(cuid())
+  userId       String
+  videoId      String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  startedAt    DateTime @default(now())
+  endedAt      DateTime?
+  durationSecs Int      @default(0)
+  deviceType   String?
+  userAgent    String?
+
+  @@index([userId])
+  @@index([videoId])
+  @@index([startedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUIZ
+// ─────────────────────────────────────────────────────────────────────────────
+
+model QuizQuestion {
+  id           String   @id @default(cuid())
+  videoId      String
+  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  question     String   @db.Text
+  options      String[]
+  correctIndex Int
+  explanation  String   @db.Text
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([videoId])
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  videoId     String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  score       Int
+  total       Int
+  xpAwarded   Boolean  @default(false)
+  xpAmount    Int      @default(0)
+  completedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([videoId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// XP & GAMIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+model XpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String
+  sourceId  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAVED VIDEOS & PLAYLISTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SavedVideo {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  savedAt   DateTime @default(now())
+
+  @@unique([userId, videoId])
+  @@index([userId])
+}
+
+model Playlist {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  items     PlaylistItem[]
+
+  @@index([userId])
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  videoId    String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  order      Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  @@unique([playlistId, videoId])
+  @@index([playlistId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  videoId   String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  event     String
+  metadata  Json?
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([userId])
+  @@index([videoId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  resourceId String?
+  videoId    String?
+  video      Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}

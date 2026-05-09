@@ -14,10 +14,19 @@ export interface WatchRecord {
   notes: string;
 }
 
+export interface QuizResult {
+  videoId: string;
+  score: number;
+  total: number;
+  xpAwarded: boolean;
+  completedAt: string;
+}
+
 interface VideoState {
   history: Record<string, WatchRecord>;
-  // null = use DEFAULT_VIDEOS; populated = admin has made edits
+  /** null = use DEFAULT_VIDEOS; populated = admin has made edits */
   adminOverrides: VideoLesson[] | null;
+  quizResults: Record<string, QuizResult>;
 }
 
 interface VideoActions {
@@ -26,10 +35,14 @@ interface VideoActions {
   toggleSaved: (videoId: string) => void;
   updateNotes: (videoId: string, notes: string) => void;
   markCompleted: (videoId: string) => void;
+  saveQuizResult: (videoId: string, score: number, total: number) => void;
   // admin CRUD
   getVideos: () => VideoLesson[];
+  getAdminVideos: () => VideoLesson[];
   addVideo: (v: VideoLesson) => void;
   removeVideo: (id: string) => void;
+  softDeleteVideo: (id: string) => void;
+  restoreVideo: (id: string) => void;
   editVideo: (id: string, patch: Partial<VideoLesson>) => void;
   reorder: (id: string, direction: "up" | "down") => void;
   resetToDefaults: () => void;
@@ -60,6 +73,7 @@ export const useVideoStore = create<VideoState & VideoActions>()(
     (set, get) => ({
       history: {},
       adminOverrides: null,
+      quizResults: {},
 
       updateProgress(videoId, pct, watchedSeconds) {
         set((s) => {
@@ -167,22 +181,48 @@ export const useVideoStore = create<VideoState & VideoActions>()(
         });
       },
 
+      saveQuizResult(videoId, score, total) {
+        set((s) => ({
+          quizResults: {
+            ...s.quizResults,
+            [videoId]: { videoId, score, total, xpAwarded: true, completedAt: new Date().toISOString() },
+          },
+        }));
+      },
+
+      /** Returns all non-soft-deleted videos (published + draft). */
       getVideos() {
+        const all = get().adminOverrides ?? DEFAULT_VIDEOS;
+        return all.filter((v) => v.deletedAt === null);
+      },
+
+      /** Admin-only — includes soft-deleted videos. */
+      getAdminVideos() {
         return get().adminOverrides ?? DEFAULT_VIDEOS;
       },
 
       addVideo(v) {
-        const videos = get().getVideos();
+        const videos = get().getAdminVideos();
         set({ adminOverrides: [...videos, v] });
       },
 
       removeVideo(id) {
-        const videos = get().getVideos();
+        const videos = get().getAdminVideos();
         set({ adminOverrides: videos.filter((v) => v.id !== id) });
       },
 
+      softDeleteVideo(id) {
+        const videos = get().getAdminVideos();
+        set({ adminOverrides: videos.map((v) => v.id === id ? { ...v, deletedAt: new Date().toISOString() } : v) });
+      },
+
+      restoreVideo(id) {
+        const videos = get().getAdminVideos();
+        set({ adminOverrides: videos.map((v) => v.id === id ? { ...v, deletedAt: null } : v) });
+      },
+
       editVideo(id, patch) {
-        const videos = get().getVideos();
+        const videos = get().getAdminVideos();
         set({ adminOverrides: videos.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
       },
 
@@ -240,7 +280,11 @@ export const useVideoStore = create<VideoState & VideoActions>()(
     {
       name: "catalyst-videos",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ history: s.history, adminOverrides: s.adminOverrides }),
+      partialize: (s) => ({
+        history:        s.history,
+        adminOverrides: s.adminOverrides,
+        quizResults:    s.quizResults,
+      }),
     }
   )
 );

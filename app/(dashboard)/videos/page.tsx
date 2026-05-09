@@ -36,7 +36,7 @@ export default function VideosPage() {
   const [editTarget, setEditTarget]   = useState<VideoLesson | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const { getVideos, removeVideo, reorder, resetToDefaults, history } = useVideoStore();
+  const { getVideos, softDeleteVideo, reorder, resetToDefaults, history } = useVideoStore();
   const { isAdmin, plan, previewPlan } = useAuthStore();
 
   // Use preview plan if admin is testing, otherwise use user's actual plan
@@ -63,9 +63,10 @@ export default function VideosPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return allVideos.filter((v) => {
-      // Admin can see all videos; users see only accessible videos
-      if (!isAdmin && !canAccessVideo(userPlan ?? "free", v.access, false)) {
-        return false;
+      // Non-admins: hide draft videos and inaccessible plan-gated videos
+      if (!isAdmin) {
+        if (v.status !== "published") return false;
+        if (!canAccessVideo(userPlan ?? "free", v.access, false)) return false;
       }
       const matchCat = filter === "All" || v.category === filter;
       const matchQ   = !q || v.title.toLowerCase().includes(q) || v.instructor.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q));
@@ -77,7 +78,7 @@ export default function VideosPage() {
 
   function handleDelete(id: string) {
     if (deleteConfirm === id) {
-      removeVideo(id);
+      softDeleteVideo(id);   // soft delete — sets deletedAt, recoverable via resetToDefaults
       setDeleteConfirm(null);
     } else {
       setDeleteConfirm(id);
@@ -117,7 +118,12 @@ export default function VideosPage() {
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-yellow-400/10 border border-yellow-400/20 text-yellow-400 text-xs">
             <ShieldCheck size={15} />
             <span className="font-semibold">Admin mode</span>
-            <span className="text-yellow-400/60">— hover cards to edit, reorder, or delete. All access bypassed.</span>
+            <span className="text-yellow-400/60">— hover cards to edit, reorder, or soft-delete. Reset restores all.</span>
+            {allVideos.some((v) => v.status === "draft") && (
+              <span className="px-2 py-0.5 bg-yellow-400/20 border border-yellow-400/30 rounded-full text-[10px] font-bold">
+                {allVideos.filter((v) => v.status === "draft").length} draft
+              </span>
+            )}
             <button
               onClick={() => setEditTarget({ id: `v${Date.now()}`, youtubeId: "", title: "", instructor: "", description: "", duration: "", views: "0", rating: 4.5, category: "Strategy", access: "free", tags: [], featured: false, order: allVideos.length, status: "draft", deletedAt: null })}
               className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/20 border border-yellow-400/30 rounded-lg hover:bg-yellow-400/30 transition-all font-semibold"
@@ -249,7 +255,11 @@ export default function VideosPage() {
 
       {/* ── Video player modal ─────────────────────────────────────────────── */}
       {activeVideo && (
-        <VideoModal video={activeVideo} onClose={() => setActiveVideo(null)} />
+        <VideoModal
+          video={activeVideo}
+          onClose={() => setActiveVideo(null)}
+          onNavigate={setActiveVideo}
+        />
       )}
 
       {/* ── Admin edit modal ───────────────────────────────────────────────── */}
