@@ -7,7 +7,7 @@ import { VideoLesson, DEFAULT_VIDEOS, VideoAccess } from "./videos";
 
 // ── Video catalog ──────────────────────────────────────────────────────────────
 
-let _videos: VideoLesson[] = DEFAULT_VIDEOS.map((v) => ({ ...v }));
+const _videos: VideoLesson[] = DEFAULT_VIDEOS.map((v) => ({ ...v }));
 
 /** Map of "userId:videoId" → xpAwardedAt ISO string (prevents duplicate XP) */
 const _xpRegistry = new Map<string, string>();

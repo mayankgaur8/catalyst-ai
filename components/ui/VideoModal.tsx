@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState, useReducer } from "react";
 import {
   X, AlertCircle, Bookmark, BookmarkCheck, CheckCircle2,
   ExternalLink, FileText, Lightbulb, ChevronDown, ChevronUp,
-  RotateCcw, Loader2, ThumbsUp, Zap, Trophy,
+  RotateCcw, ThumbsUp, Zap, Trophy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoLesson, VideoQuizQuestion } from "@/lib/videos";
@@ -178,6 +178,7 @@ export default function VideoModal({ video, onClose, onNavigate }: VideoModalPro
   const [showSummary,   setShowSummary]   = useState(false);
   const [notesOpen,     setNotesOpen]     = useState(false);
   const [notesText,     setNotesText]     = useState(existingNotes);
+  const [ytError,       setYtError]       = useState(false);
 
   // ── Quiz state via reducer ──
   const totalQ = video.quiz?.length ?? 0;
@@ -263,7 +264,7 @@ export default function VideoModal({ video, onClose, onNavigate }: VideoModalPro
               } catch { /* ignore */ }
             }
           },
-          onError() { stopPolling(); },
+          onError() { stopPolling(); setYtError(true); },
         },
       });
     });
@@ -348,12 +349,26 @@ export default function VideoModal({ video, onClose, onNavigate }: VideoModalPro
 
                 {/* Player */}
                 <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-                  {video.youtubeId ? (
+                  {video.youtubeId && !ytError ? (
                     <div ref={playerContainerRef} className="absolute inset-0" id={`yt-player-${video.id}`} />
                   ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark-900 gap-4 text-white/40">
-                      <AlertCircle size={40} className="text-white/20" />
-                      <p className="text-sm">Video not available yet</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark-900 gap-3 text-white/40 px-6 text-center">
+                      <AlertCircle size={36} className="text-white/20 flex-shrink-0" />
+                      <p className="text-sm">
+                        {ytError
+                          ? "Video unavailable — it may be restricted or removed on YouTube."
+                          : "Video not available yet. Check back soon!"}
+                      </p>
+                      {ytError && video.youtubeId && (
+                        <a
+                          href={`https://youtu.be/${video.youtubeId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-neon-blue hover:underline"
+                        >
+                          Try opening on YouTube →
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>

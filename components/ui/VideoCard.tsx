@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Play, Lock, Star, Clock, Eye, Edit2, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Play, Lock, Star, Eye, Edit2, Trash2, ArrowUp, ArrowDown, CheckCircle2, BookmarkCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VideoLesson, CATEGORY_COLORS, ytThumbnail, canAccessVideo } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
@@ -31,10 +31,12 @@ export default function VideoCard({
 }: VideoCardProps) {
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const [thumbError, setThumbError] = useState(false);
-  const history = useVideoStore((s) => s.history[video.id]);
+  const history    = useVideoStore((s) => s.history[video.id]);
+  const quizResult = useVideoStore((s) => s.quizResults?.[video.id]);
 
   const progressPct = history?.progressPct ?? 0;
-  const isWatched = progressPct >= 95;
+  const isWatched   = progressPct >= 95;
+  const isSaved     = history?.savedForLater ?? false;
   const thumbnailUrl = video.youtubeId ? ytThumbnail(video.youtubeId, "maxresdefault") : null;
   const fallbackUrl = video.youtubeId ? ytThumbnail(video.youtubeId, "hqdefault") : null;
   const canAccess = isAdmin || canAccessVideo(userPlan, video.access, false);
@@ -183,11 +185,28 @@ export default function VideoCard({
           </span>
         </div>
 
-        {/* Watch history indicator */}
-        {progressPct > 0 && (
-          <div className="text-[10px] text-white/25 mb-2 flex items-center gap-1">
-            <Clock size={9} />
-            {isWatched ? "Completed" : `${Math.round(progressPct)}% watched`}
+        {/* Status badges */}
+        {(progressPct > 0 || quizResult || isSaved) && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {isWatched ? (
+              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 border border-green-500/20 font-semibold">
+                <CheckCircle2 size={8} /> Completed
+              </span>
+            ) : progressPct > 0 ? (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-neon-blue/15 text-neon-blue border border-neon-blue/20 font-semibold">
+                ▶ {Math.round(progressPct)}% watched
+              </span>
+            ) : null}
+            {quizResult && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 font-semibold">
+                Quiz ✓
+              </span>
+            )}
+            {isSaved && (
+              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-white/8 text-white/45 border border-white/10 font-semibold">
+                <BookmarkCheck size={8} /> Saved
+              </span>
+            )}
           </div>
         )}
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X, Save } from "lucide-react";
 import { motion } from "framer-motion";
-import { VideoLesson, VideoCategory, VideoAccess } from "@/lib/videos";
+import { VideoLesson, VideoCategory, VideoAccess, VideoStatus } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
 import { cn } from "@/lib/utils";
 
@@ -101,12 +101,12 @@ export default function VideoAdminEditModal({ video, isNew, onClose }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Access">
-              <select value={form.access} onChange={(e) => set("access", e.target.value as any)} className={cn(input(), "cursor-pointer")}>
+              <select value={form.access} onChange={(e) => set("access", e.target.value as VideoAccess)} className={cn(input(), "cursor-pointer")}>
                 {ACCESS_LEVELS.map((level) => <option key={level} value={level}>{level === "pro" ? "Pro" : level === "elite" ? "Elite" : "Free"}</option>)}
               </select>
             </Field>
             <Field label="Status">
-              <select value={form.status ?? "draft"} onChange={(e) => set("status", e.target.value as any)} className={cn(input(), "cursor-pointer")}>
+              <select value={form.status ?? "draft"} onChange={(e) => set("status", e.target.value as VideoStatus)} className={cn(input(), "cursor-pointer")}>
                 {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
               </select>
             </Field>
