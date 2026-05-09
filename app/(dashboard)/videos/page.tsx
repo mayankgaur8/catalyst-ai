@@ -9,7 +9,7 @@ import {
   PlusCircle, ChevronRight, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VideoLesson, VideoCategory, CATEGORY_COLORS, ytThumbnail } from "@/lib/videos";
+import { VideoLesson, VideoCategory, CATEGORY_COLORS, ytThumbnail, canAccessVideo } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import VideoCard from "@/components/ui/VideoCard";
@@ -37,7 +37,10 @@ export default function VideosPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const { getVideos, removeVideo, reorder, resetToDefaults, history } = useVideoStore();
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, plan, previewPlan } = useAuthStore();
+
+  // Use preview plan if admin is testing, otherwise use user's actual plan
+  const userPlan = isAdmin && previewPlan ? previewPlan : plan;
 
   const allVideos = getVideos().sort((a, b) => a.order - b.order);
 
@@ -60,11 +63,15 @@ export default function VideosPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return allVideos.filter((v) => {
+      // Admin can see all videos; users see only accessible videos
+      if (!isAdmin && !canAccessVideo(userPlan ?? "free", v.access, false)) {
+        return false;
+      }
       const matchCat = filter === "All" || v.category === filter;
       const matchQ   = !q || v.title.toLowerCase().includes(q) || v.instructor.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q));
       return matchCat && matchQ;
     });
-  }, [allVideos, filter, search]);
+  }, [allVideos, filter, search, isAdmin, userPlan]);
 
   const watchedCount = Object.values(history).filter((r) => r.progressPct >= 95).length;
 
@@ -214,6 +221,7 @@ export default function VideosPage() {
                   video={v}
                   index={i}
                   isAdmin={isAdmin}
+                  userPlan={userPlan ?? "free"}
                   onPlay={setActiveVideo}
                   onEdit={setEditTarget}
                   onDelete={handleDelete}

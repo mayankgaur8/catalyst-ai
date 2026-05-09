@@ -5,13 +5,14 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { Play, Lock, Star, Clock, Eye, Edit2, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VideoLesson, CATEGORY_COLORS, ytThumbnail } from "@/lib/videos";
+import { VideoLesson, CATEGORY_COLORS, ytThumbnail, canAccessVideo } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
 
 interface VideoCardProps {
   video: VideoLesson;
   index?: number;
   isAdmin?: boolean;
+  userPlan?: string;
   onPlay: (video: VideoLesson) => void;
   onEdit?: (video: VideoLesson) => void;
   onDelete?: (id: string) => void;
@@ -22,6 +23,7 @@ export default function VideoCard({
   video,
   index = 0,
   isAdmin = false,
+  userPlan = "free",
   onPlay,
   onEdit,
   onDelete,
@@ -35,7 +37,7 @@ export default function VideoCard({
   const isWatched = progressPct >= 95;
   const thumbnailUrl = video.youtubeId ? ytThumbnail(video.youtubeId, "maxresdefault") : null;
   const fallbackUrl = video.youtubeId ? ytThumbnail(video.youtubeId, "hqdefault") : null;
-  const isFree = video.access === "free";
+  const canAccess = isAdmin || canAccessVideo(userPlan, video.access, false);
 
   function handleThumbError() {
     if (!thumbError && fallbackUrl) {
@@ -88,32 +90,37 @@ export default function VideoCard({
         {/* Hover overlay + play/lock button */}
         <button
           onClick={() => onPlay(video)}
-          disabled={!isFree && !isAdmin}
-          aria-label={isFree || isAdmin ? `Play ${video.title}` : `Unlock ${video.title} with PRO`}
+          disabled={!canAccess}
+          aria-label={canAccess ? `Play ${video.title}` : `Upgrade to ${video.access.toUpperCase()} to access ${video.title}`}
           className={cn(
             "absolute inset-0 flex items-center justify-center transition-all duration-200",
             "bg-black/0 hover:bg-black/40 focus:bg-black/40",
-            (!isFree && !isAdmin) && "cursor-not-allowed"
+            !canAccess && "cursor-not-allowed"
           )}
         >
           <div className={cn(
             "w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-200",
             "opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100",
-            isFree || isAdmin
+            canAccess
               ? "bg-neon-blue/80 neon-play-btn"
               : "bg-white/15"
           )}>
-            {isFree || isAdmin
+            {canAccess
               ? <Play size={22} className="text-white ml-1" fill="white" />
               : <Lock size={18} className="text-white" />
             }
           </div>
         </button>
 
-        {/* PRO badge */}
-        {!isFree && (
-          <div className="absolute top-2 right-2 bg-neon-purple/85 backdrop-blur-sm text-[10px] px-2 py-0.5 rounded font-bold tracking-wide">
-            PRO
+        {/* Access badge */}
+        {video.access !== "free" && (
+          <div className={cn(
+            "absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded font-bold tracking-wide backdrop-blur-sm",
+            video.access === "elite" 
+              ? "bg-amber-500/85 text-white" 
+              : "bg-neon-purple/85 text-white"
+          )}>
+            {video.access === "elite" ? "ELITE" : "PRO"}
           </div>
         )}
 
@@ -187,17 +194,17 @@ export default function VideoCard({
         <div className="flex gap-2">
           <button
             onClick={() => onPlay(video)}
-            disabled={!isFree && !isAdmin}
+            disabled={!canAccess}
             className={cn(
               "flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all",
-              isFree || isAdmin
+              canAccess
                 ? "bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 border border-neon-blue/20"
                 : "bg-white/5 text-white/35 border border-white/8 cursor-not-allowed"
             )}
           >
-            {isFree || isAdmin
-              ? <><Play size={11} fill="currentColor" /> Watch Free</>
-              : <><Lock size={11} /> Unlock with PRO</>
+            {canAccess
+              ? <><Play size={11} fill="currentColor" /> Watch</>
+              : <><Lock size={11} /> Upgrade</>
             }
           </button>
 
