@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  VERCEL_TOKEN: ${{ secrets['VERCEL_TOKEN'] }}
+  VERCEL_ORG_ID: ${{ secrets['VERCEL_ORG_ID'] }}
+  VERCEL_PROJECT_ID: ${{ secrets['VERCEL_PROJECT_ID'] }}
+
 jobs:
   preview:
     name: Deploy Preview
@@ -21,11 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Deploy to Vercel Preview
-        run: npx vercel deploy --prebuilt --token ${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel deploy --prebuilt --token "$VERCEL_TOKEN"
 
   production:
     name: Deploy Production
@@ -40,8 +41,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Deploy to Vercel Production
-        run: npx vercel deploy --prebuilt --prod --token ${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"

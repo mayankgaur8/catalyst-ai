@@ -148,7 +148,7 @@ function MemoryCard({ memory, score, onPin, onDelete, onEdit }: MemoryCardProps)
   );
 }
 
-function AISummaryCard({ memories }: { memories: Memory[] }) {
+function AISummaryCard({ memories, referenceTime }: { memories: Memory[]; referenceTime: number }) {
   const weakAreas = useMemo(() => {
     const counts: Record<string, number> = {};
     memories.forEach((m) => m.relatedTopics.forEach((t) => { counts[t] = (counts[t] ?? 0) + 1; }));
@@ -188,7 +188,7 @@ function AISummaryCard({ memories }: { memories: Memory[] }) {
           <p className="text-[10px] text-white/40 mb-1.5 uppercase tracking-wider">Memory Health</p>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs"><span className="text-white/60">Pinned</span><span className="text-white/80">{memories.filter((m) => m.isManuallyPinned).length}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-white/60">This week</span><span className="text-white/80">{memories.filter((m) => Date.now() - new Date(m.createdAt).getTime() < 7 * 86_400_000).length}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-white/60">This week</span><span className="text-white/80">{memories.filter((m) => referenceTime - new Date(m.createdAt).getTime() < 7 * 86_400_000).length}</span></div>
             <div className="flex justify-between text-xs"><span className="text-white/60">Top topic</span><span className="text-white/80">{weakAreas[0]?.[0] ?? "–"}</span></div>
           </div>
         </div>
@@ -214,6 +214,7 @@ const FILTERS: { label: string; value: FilterMode; icon: typeof Brain }[] = [
 
 export default function MemoryManagerPage() {
   const { user } = useAuthStore();
+  const [referenceTime] = useState(() => Date.now());
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -249,11 +250,18 @@ export default function MemoryManagerPage() {
     }
   }, [user?.id, headers]);
 
-  useEffect(() => { void loadMemories(); }, [loadMemories]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadMemories();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadMemories]);
 
   // Debounced search
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults(null); return; }
+    if (!searchQuery.trim()) {
+      return;
+    }
     const t = setTimeout(async () => {
       setSearching(true);
       try {
@@ -314,7 +322,7 @@ export default function MemoryManagerPage() {
   }, [memories, filter, searchQuery, searchResults]);
 
   const pinnedCount = memories.filter((m) => m.isManuallyPinned).length;
-  const thisWeekCount = memories.filter((m) => Date.now() - new Date(m.createdAt).getTime() < 7 * 86_400_000).length;
+  const thisWeekCount = memories.filter((m) => referenceTime - new Date(m.createdAt).getTime() < 7 * 86_400_000).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
@@ -354,7 +362,7 @@ export default function MemoryManagerPage() {
       )}
 
       {/* AI Summary Card */}
-      <AISummaryCard memories={memories} />
+      <AISummaryCard memories={memories} referenceTime={referenceTime} />
 
       {/* Add Memory Form */}
       <AnimatePresence>

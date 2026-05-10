@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts";
 import {
   Users, TrendingUp, Brain, CreditCard, ArrowUpRight,
-  ArrowDownRight, Zap, Activity, Target, BarChart2,
+  ArrowDownRight, Zap, Activity, Target,
   RefreshCw, AlertTriangle
 } from "lucide-react";
 
@@ -189,31 +189,16 @@ function generateMockData(): AnalyticsData {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminAnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [data, setData] = useState<AnalyticsData>(() => generateMockData());
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  const loadData = useCallback(async () => {
-    // In production, call /api/admin/analytics — using mock for now
-    setData(generateMockData());
-    setLastUpdated(new Date());
-  }, []);
+  const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date());
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    setData(generateMockData());
+    setLastUpdated(new Date());
     setRefreshing(false);
   };
-
-  useEffect(() => { void loadData(); }, [loadData]);
-
-  if (!data) {
-    return (
-      <div className="min-h-screen bg-[#080c16] flex items-center justify-center">
-        <Activity size={24} className="text-sky-400 animate-pulse" />
-      </div>
-    );
-  }
 
   const { overview } = data;
 
