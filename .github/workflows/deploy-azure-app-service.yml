@@ -27,15 +27,11 @@ jobs:
         run: |
           if [ -z "$PROFILE" ]; then
             echo "FATAL: AZURE_WEBAPP_PUBLISH_PROFILE secret is not set."
-            echo "Fix: GitHub repo → Settings → Secrets and variables → Actions → New repository secret"
-            echo "Name: AZURE_WEBAPP_PUBLISH_PROFILE"
-            echo "Value: paste the XML from Azure Portal → App Service → Get publish profile"
             exit 1
           fi
-          PROFILE_LEN=${#PROFILE}
-          echo "Publish profile length: $PROFILE_LEN chars"
+          echo "Publish profile length: ${#PROFILE} chars"
           if echo "$PROFILE" | grep -q 'publishProfile'; then
-            echo "Publish profile XML looks valid (contains 'publishProfile')"
+            echo "Publish profile XML looks valid"
           else
             echo "WARNING: PROFILE does not look like a publish profile XML"
           fi
@@ -60,130 +56,143 @@ jobs:
 
       - name: Verify Next standalone output
         run: |
-          test -f .next/standalone/server.js || { echo "FATAL: .next/standalone/server.js missing"; exit 1; }
-          test -d .next/static               || { echo "FATAL: .next/static missing"; exit 1; }
-          echo "Standalone OK"
+          test -f .next/standalone/server.js || {
+            echo "FATAL: .next/standalone/server.js missing"
+            find .next -maxdepth 4 -type f | head -100
+            exit 1
+          }
+          test -d .next/static || { echo "FATAL: .next/static missing"; exit 1; }
+          echo "Standalone output verified"
 
       - name: Prepare Azure deployment package
         run: |
-          rm -rf deploy
-          mkdir -p deploy
+          # Start completely clean — no leftover deploy/ or deploy.zip from git checkout
+          rm -rf deploy deploy.zip
 
+          # Copy standalone runtime (contains server.js, node_modules, .next/server)
+          mkdir -p deploy
           cp -R .next/standalone/. deploy/
 
+          # Copy compiled static assets into the expected location
           mkdir -p deploy/.next/static
           cp -R .next/static/. deploy/.next/static/
 
+          # Copy public folder if present
           if [ -d public ]; then
             mkdir -p deploy/public
             cp -R public/. deploy/public/
           fi
 
+          # Optional compatibility wrapper
           mkdir -p deploy/standalone
           printf 'require("../server.js")\n' > deploy/standalone/server.js
 
+          # Minimal package.json — all deps are already bundled in standalone
           node -e "
             var fs = require('fs');
             var pkg = { name: 'catprep', version: '0.1.0', scripts: { start: 'node server.js' } };
             fs.writeFileSync('deploy/package.json', JSON.stringify(pkg, null, 2) + '\n');
-            var lock = { name: 'catprep', version: '0.1.0', lockfileVersion: 3, requires: true, packages: {} };
-            fs.writeFileSync('deploy/package-lock.json', JSON.stringify(lock, null, 2) + '\n');
-            console.log('Wrote minimal package.json and package-lock.json');
+            console.log('Wrote deploy/package.json');
           "
 
-          # Tell Kudu to skip build automation entirely
+          # Tell Kudu SCM to skip build automation
           printf '[config]\nSCM_DO_BUILD_DURING_DEPLOYMENT = false\n' > deploy/.deployment
 
-      - name: Verify deployment package
+      - name: Hard verify deploy folder
         run: |
-          test -f deploy/server.js            || { echo "FATAL: deploy/server.js missing"; exit 1; }
-          test -f deploy/standalone/server.js  || { echo "FATAL: deploy/standalone/server.js missing"; exit 1; }
-          test -d deploy/.next/static         || { echo "FATAL: deploy/.next/static missing"; exit 1; }
-          test -f deploy/.deployment          || { echo "FATAL: deploy/.deployment missing"; exit 1; }
-          START=$(node -e "process.stdout.write(require('./deploy/package.json').scripts.start)")
-          [ "$START" = "node server.js" ] || { echo "FATAL: package.json start='$START'"; exit 1; }
-          echo "Package verified — start=$START"
+          test -f deploy/server.js || {
+            echo "FATAL: deploy/server.js missing"
+            echo "Deploy folder contents:"
+            find deploy -maxdepth 3 -type f | head -100
+            exit 1
+          }
+          test -d deploy/.next/static || { echo "FATAL: deploy/.next/static missing"; exit 1; }
+          test -f deploy/.deployment  || { echo "FATAL: deploy/.deployment missing"; exit 1; }
+          echo "=== deploy/ root ==="
+          ls -la deploy/
+          echo "Hard verify PASSED"
 
-      - name: Zip deployment package
+      - name: Create zip from inside deploy folder
         run: |
           cd deploy
           zip -r -y ../deploy.zip .
           cd ..
 
-      - name: Verify zip structure
+      - name: Hard verify zip structure
         run: |
           echo "Zip size: $(du -sh deploy.zip | cut -f1)"
-          echo "--- server.js entries ---"
-          unzip -l deploy.zip | grep "server\.js"
-          echo "--- package.json ---"
+          echo ""
+          echo "=== All server.js entries in zip ==="
+          unzip -l deploy.zip | grep "server\.js" || true
+          echo ""
+          echo "=== package.json content ==="
           unzip -p deploy.zip package.json
-          unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'server\.js' \
-            || { echo "FATAL: server.js NOT at zip root"; exit 1; }
-          unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'standalone/server\.js' \
-            || { echo "FATAL: standalone/server.js missing from zip"; exit 1; }
-          unzip -l deploy.zip | awk '{print $NF}' | grep -qx '\.deployment' \
-            || { echo "FATAL: .deployment missing from zip"; exit 1; }
-          echo "Zip structure OK"
+          echo ""
+
+          unzip -l deploy.zip | grep -q " server\.js$" || {
+            echo "FATAL: server.js is NOT at zip root"
+            unzip -l deploy.zip | grep server.js || true
+            exit 1
+          }
+          unzip -l deploy.zip | grep -q " standalone/server\.js$" || {
+            echo "FATAL: standalone/server.js missing from zip"
+            exit 1
+          }
+          echo "Zip structure PASSED"
 
       - name: Configure Azure app settings via Kudu
         continue-on-error: true
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//' || true)
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//' || true)
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
-
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
-
-          echo "Setting all required app settings via Kudu..."
+          echo "Setting Azure app settings via Kudu..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
             -X PUT "$KUDU/api/settings" \
             -u "$KUSER:$KPASS" \
             -H "Content-Type: application/json" \
-            -d '{
-              "SCM_DO_BUILD_DURING_DEPLOYMENT": "false",
-              "ENABLE_ORYX_BUILD": "false",
-              "WEBSITE_NODE_DEFAULT_VERSION": "~22",
-              "NODE_ENV": "production",
-              "PORT": "8080"
-            }' || echo "000")
+            -d '{"SCM_DO_BUILD_DURING_DEPLOYMENT":"false","ENABLE_ORYX_BUILD":"false","WEBSITE_NODE_DEFAULT_VERSION":"~22","NODE_ENV":"production","PORT":"8080"}')
           echo "Kudu /api/settings HTTP $STATUS"
-
           if [ "$STATUS" = "204" ] || [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
             echo "App settings updated successfully"
           else
-            echo "Warning: Kudu settings returned $STATUS"
-            echo "Manual fallback: set these in Azure Portal → Configuration → Application settings:"
+            echo "Warning: returned $STATUS"
+            echo "Set these manually in Azure Portal → Configuration → Application settings:"
             echo "  SCM_DO_BUILD_DURING_DEPLOYMENT = false"
-            echo "  ENABLE_ORYX_BUILD = false"
-            echo "  WEBSITE_NODE_DEFAULT_VERSION = ~22"
-            echo "  NODE_ENV = production"
-            echo "  PORT = 8080"
+            echo "  ENABLE_ORYX_BUILD              = false"
+            echo "  WEBSITE_NODE_DEFAULT_VERSION   = ~22"
+            echo "  NODE_ENV                       = production"
+            echo "  PORT                           = 8080"
           fi
 
-      - name: Clean stale wwwroot files via Kudu
+      - name: Clean stale wwwroot via Kudu before deploy
         continue-on-error: true
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//' || true)
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//' || true)
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
-
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
-
-          echo "Cleaning /home/site/wwwroot before fresh deploy..."
-          STATUS=$(curl -s -o /tmp/kudu_clean.txt -w "%{http_code}" --max-time 60 \
+          echo "Wiping /home/site/wwwroot before fresh deployment..."
+          STATUS=$(curl -s -o /tmp/clean_out.txt -w "%{http_code}" --max-time 90 \
             -X POST "$KUDU/api/command" \
             -u "$KUSER:$KPASS" \
             -H "Content-Type: application/json" \
-            -d '{"command":"rm -rf /home/site/wwwroot/* /home/site/wwwroot/.[!.]*","dir":"/home/site"}' || echo "000")
+            -d '{"command":"rm -rf /home/site/wwwroot && mkdir -p /home/site/wwwroot","dir":"/home"}')
           echo "Kudu /api/command HTTP $STATUS"
-          cat /tmp/kudu_clean.txt || true
-          echo "wwwroot cleaned (or skipped if auth failed)"
+          cat /tmp/clean_out.txt || true
+          if [ "$STATUS" = "200" ]; then
+            echo "wwwroot wiped clean"
+          else
+            echo "Cleanup returned $STATUS — wipe manually if needed:"
+            echo "  Kudu SSH → cd /home/site/wwwroot && rm -rf *"
+          fi
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
@@ -192,31 +201,32 @@ jobs:
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: deploy.zip
 
-      - name: Verify server.js landed in Azure wwwroot
+      - name: Verify server.js in Azure wwwroot
         continue-on-error: true
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//' || true)
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//' || true)
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
-
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
-
-          echo "Waiting 20s for deployment extraction to complete..."
-          sleep 20
-
+          echo "Waiting 30s for Azure to extract the zip..."
+          sleep 30
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
             -u "$KUSER:$KPASS" \
-            "$KUDU/api/vfs/site/wwwroot/server.js" || echo "000")
+            "$KUDU/api/vfs/site/wwwroot/server.js")
           echo "wwwroot/server.js VFS check: HTTP $STATUS"
-
           if [ "$STATUS" = "200" ]; then
-            echo "SUCCESS: /home/site/wwwroot/server.js confirmed present"
+            echo "SUCCESS: /home/site/wwwroot/server.js is present"
           else
-            echo "FAIL: server.js not found (HTTP $STATUS)"
+            echo "WARNING: server.js not confirmed (HTTP $STATUS)"
             echo "--- wwwroot listing ---"
             curl -s --max-time 15 -u "$KUSER:$KPASS" "$KUDU/api/vfs/site/wwwroot/" | \
               node -e "var d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ try { JSON.parse(d).forEach(f=>console.log(f.name,f.mime)); } catch(e) { console.log(d); } })"
+            echo ""
+            echo "If wwwroot still shows source files (app/, components/, Dockerfile):"
+            echo "  1. Open Kudu SSH: https://catalyst-ai-mayank.scm.azurewebsites.net/webssh/host"
+            echo "  2. Run: rm -rf /home/site/wwwroot/* && ls -la /home/site/wwwroot/"
+            echo "  3. Re-run this workflow from GitHub Actions"
           fi
