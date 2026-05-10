@@ -38,15 +38,15 @@ const SSE_HEADERS = {
 
 function parseHistory(raw: unknown): HistoryMessage[] {
   if (!Array.isArray(raw)) return [];
-  return raw
+  return (raw
     .filter((m): m is { role: string; content: string } =>
       typeof m === "object" && m !== null &&
       typeof (m as Record<string, unknown>).role === "string" &&
       typeof (m as Record<string, unknown>).content === "string"
     )
-    .filter((m) => m.role === "user" || m.role === "ai")
-    .map((m) => ({ role: m.role as "user" | "ai", content: m.content }))
-    .slice(-8);
+    .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
+    .map((m) => ({ role: m.role === "USER" ? "user" : "assistant" as const, content: m.content }))
+    .slice(-8)) as HistoryMessage[];
 }
 
 function parseUserProfile(raw: unknown): UserProfileContext | undefined {

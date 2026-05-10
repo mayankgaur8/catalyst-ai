@@ -8,7 +8,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,15 +26,23 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  subscription  Subscription?
-  videoProgress VideoProgress[]
-  watchSessions VideoWatchSession[]
-  xpEvents      XpEvent[]
-  quizAttempts  QuizAttempt[]
-  savedVideos   SavedVideo[]
-  playlists     Playlist[]
-  analyticsEvents AnalyticsEvent[]
-  auditLogs     AdminAuditLog[]  @relation("AuditActor")
+  subscription      Subscription?
+  videoProgress     VideoProgress[]
+  watchSessions     VideoWatchSession[]
+  xpEvents          XpEvent[]
+  quizAttempts      QuizAttempt[]
+  savedVideos       SavedVideo[]
+  playlists         Playlist[]
+  analyticsEvents   AnalyticsEvent[]
+  auditLogs         AdminAuditLog[]  @relation("AuditActor")
+  
+  // AI Mentor relations
+  conversations     Conversation[]
+  memories          Memory[]
+  aiUsage           AIUsage[]
+  studySessions     StudySession[]
+  studyStreak       StudyStreak?
+  aiChallenges      AIChallenge[]
 
   @@index([email])
   @@index([role])
@@ -314,4 +321,162 @@ model AdminAuditLog {
   @@index([actorId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI CONVERSATIONS & MEMORY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Conversation {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String    @default("New Conversation")
+  topic       String?   @default("general")
+  isPinned    Boolean   @default(false)
+  isFavorite  Boolean   @default(false)
+  deletedAt   DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  messages    Message[]
+  memories    Memory[]
+  metadata    Json?     // Usage stats, model info, etc.
+
+  @@unique([userId, id])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([isPinned])
+  @@index([deletedAt])
+}
+
+model Message {
+  id              String      @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            MessageRole
+  content         String      @db.Text
+  metadata        Json?       // Provider info, tokens, latency, model, etc.
+  feedback        String?     // user|helpful|unhelpful|flagged
+  flagReason      String?
+  regeneratedFrom String?     // ID of previous message if regenerated
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([conversationId])
+  @@index([role])
+  @@index([createdAt])
+  @@index([feedback])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model Memory {
+  id                  String    @id @default(cuid())
+  userId              String
+  conversationId      String?
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation        Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  
+  summary             String    @db.Text  // Long-term memory summary
+  isManuallyPinned    Boolean   @default(false)
+  relatedTopics       String[]  @default([])
+  mentionCount        Int       @default(1)
+  lastAccessedAt      DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  expiresAt           DateTime? // Optional auto-deletion date
+
+  @@index([userId])
+  @@index([conversationId])
+  @@index([lastAccessedAt])
+  @@index([isManuallyPinned])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI USAGE & COSTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AIUsage {
+  id              String    @id @default(cuid())
+  userId          String
+  conversationId  String?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  provider        String    // "groq" | "openrouter" | "gemini" | "ollama"
+  model           String
+  inputTokens     Int
+  outputTokens    Int
+  totalTokens     Int
+  costUSD         Float     @default(0)
+  latencyMs       Int       @default(0)
+  status          String    @default("success") // "success" | "error" | "timeout"
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([provider])
+  @@index([createdAt])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI ENGAGEMENT & LEARNING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StudySession {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  topic         String
+  durationMins  Int       @default(0)
+  xpEarned      Int       @default(0)
+  sessionType   String    // "free_chat" | "study_plan" | "mock_test_analysis" | "flashcard" | "revision"
+  focusedWeaknesses String[]
+  performanceScore Int?   // 0-100
+  moodBefore    String?   // "confident" | "anxious" | "tired" | "neutral"
+  moodAfter     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([sessionType])
+}
+
+model StudyStreak {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  currentStreak Int       @default(0)
+  longestStreak Int       @default(0)
+  lastStudyDate DateTime  @default(now())
+  totalSessions Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model AIChallenge {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String    @db.Text
+  targetTopics  String[]
+  difficulty    String    // "easy" | "medium" | "hard"
+  status        String    @default("active") // "active" | "completed" | "abandoned"
+  xpReward      Int       @default(100)
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
 }

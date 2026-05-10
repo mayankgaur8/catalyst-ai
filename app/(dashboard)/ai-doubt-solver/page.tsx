@@ -41,7 +41,7 @@ const STREAM_TIMEOUT_MS = 30_000;
 // ── Sidebar: single conversation item ────────────────────────────────────────
 
 interface ConvItemProps {
-  conv:     { id: string; title: string; pinned: boolean; updatedAt: number };
+  conv:     { id: string; title: string; isPinned: boolean; updatedAt: string };
   isActive: boolean;
   onSelect: () => void;
   onRename: (title: string) => void;
@@ -98,7 +98,7 @@ function ConvItem({ conv, isActive, onSelect, onRename, onDelete, onPin }: ConvI
         )}
       </div>
 
-      {conv.pinned && !editing && (
+      {conv.isPinned && !editing && (
         <Pin size={10} className="flex-shrink-0 text-neon-blue/50 rotate-45" />
       )}
 
@@ -107,7 +107,7 @@ function ConvItem({ conv, isActive, onSelect, onRename, onDelete, onPin }: ConvI
           <button
             onClick={(e) => { e.stopPropagation(); onPin(); }}
             className="p-1 rounded-md hover:bg-white/10 text-white/30 hover:text-neon-blue"
-            title={conv.pinned ? "Unpin" : "Pin"}
+            title={conv.isPinned ? "Unpin" : "Pin"}
           >
             <Pin size={11} />
           </button>
@@ -163,15 +163,15 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "")}
+      className={cn("flex gap-3", msg.role === "USER" ? "flex-row-reverse" : "")}
     >
       <div className={cn(
         "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
-        msg.role === "ai"
+        msg.role === "ASSISTANT"
           ? "bg-gradient-to-br from-neon-blue to-neon-purple"
           : "bg-gradient-to-br from-orange-400 to-pink-500"
       )}>
-        {msg.role === "ai"
+        {msg.role === "ASSISTANT"
           ? <Brain size={14} className="text-white" />
           : <span className="text-[10px] font-bold text-white">A</span>
         }
@@ -179,11 +179,11 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       <div className={cn(
         "max-w-[88%] flex flex-col gap-1.5",
-        msg.role === "user" ? "items-end" : "items-start"
+        msg.role === "USER" ? "items-end" : "items-start"
       )}>
         <div className={cn(
           "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-          msg.role === "user"
+          msg.role === "USER"
             ? "bg-gradient-to-br from-neon-blue/30 to-neon-purple/20 border border-neon-blue/20 text-white"
             : msg.error
               ? "bg-red-500/8 border border-red-500/20 text-red-300"
@@ -200,7 +200,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
               <AlertCircle size={14} className="flex-shrink-0 text-red-400 mt-0.5" />
               <span>{msg.content}</span>
             </div>
-          ) : msg.role === "user" ? (
+          ) : msg.role === "USER" ? (
             <span className="whitespace-pre-wrap">{msg.content}</span>
           ) : (
             <>
@@ -212,7 +212,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           )}
         </div>
 
-        {msg.role === "ai" && !msg.streaming && !msg.error && msg.content && (
+        {msg.role === "ASSISTANT" && !msg.streaming && !msg.error && msg.content && (
           <div className="flex items-center gap-1.5">
             {msg.provider && (
               <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/5 text-white/25 border border-white/8">
@@ -265,8 +265,8 @@ export default function AIDoubtSolverPage() {
 
   const userConvs = useMemo(() => {
     const all      = getUserConversations(user?.id ?? "");
-    const pinned   = all.filter((c) => c.pinned).sort((a, b) => b.updatedAt - a.updatedAt);
-    const unpinned = all.filter((c) => !c.pinned).sort((a, b) => b.updatedAt - a.updatedAt);
+    const pinned   = all.filter((c) => c.isPinned).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    const unpinned = all.filter((c) => !c.isPinned).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     return { pinned, unpinned };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations, user?.id]);
@@ -339,8 +339,8 @@ export default function AIDoubtSolverPage() {
     isAtBottomRef.current = true;
 
     const convId = activeConv.id;
-    addMessage(convId, { role: "user", content: text });
-    const aiMsgId = addMessage(convId, { role: "ai", content: "", streaming: true });
+    addMessage(convId, { role: "USER", content: text });
+    const aiMsgId = addMessage(convId, { role: "ASSISTANT", content: "", streaming: true });
 
     setInput("");
     setThinking(true);
@@ -480,7 +480,7 @@ export default function AIDoubtSolverPage() {
   const retryLast = useCallback(() => {
     if (!lastPrompt || !isIdle || !activeConv) return;
     const last = activeConv.messages[activeConv.messages.length - 1];
-    if (last?.role === "ai" && last.error) {
+    if (last?.role === "ASSISTANT" && last.error) {
       updateMessage(activeConv.id, last.id, { error: false, content: "" });
     }
     void sendMessage(lastPrompt);
@@ -488,7 +488,7 @@ export default function AIDoubtSolverPage() {
 
   const regenerateLast = useCallback(() => {
     if (!activeConv || !isIdle) return;
-    const lastUser = [...activeConv.messages].reverse().find((m) => m.role === "user");
+    const lastUser = [...activeConv.messages].reverse().find((m) => m.role === "USER");
     if (lastUser) void sendMessage(lastUser.content);
   }, [activeConv, isIdle, sendMessage]);
 
@@ -504,7 +504,7 @@ export default function AIDoubtSolverPage() {
   // ── Derived message state ─────────────────────────────────────────────────
 
   const lastAiMsg = useMemo(
-    () => [...messages].reverse().find((m) => m.role === "ai" && !m.streaming && !m.error && m.content) ?? null,
+    () => [...messages].reverse().find((m) => m.role === "ASSISTANT" && !m.streaming && !m.error && m.content) ?? null,
     [messages]
   );
 

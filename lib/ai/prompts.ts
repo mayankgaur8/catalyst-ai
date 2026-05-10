@@ -56,7 +56,7 @@ Keep it authentic, high-energy, and CAT-specific — not generic life advice.`,
 // ── Context types ─────────────────────────────────────────────────────────────
 
 export interface HistoryMessage {
-  role: "user" | "ai";
+  role: "user" | "assistant";
   content: string;
 }
 
