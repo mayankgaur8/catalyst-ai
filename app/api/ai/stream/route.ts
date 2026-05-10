@@ -6,82 +6,87 @@ import { checkAndConsumeQuota } from "@/lib/ai/quota";
 import { getCache, setCache } from "@/lib/ai/cache";
 import { streamGroq } from "@/lib/ai/providers/groq";
 import { routeAI } from "@/lib/ai/aiRouter";
-import { buildMessages } from "@/lib/ai/prompts";
+import { buildMessages, type HistoryMessage, type UserProfileContext } from "@/lib/ai/prompts";
 import type { AIFeature } from "@/lib/ai/types";
-import type { HistoryMessage, UserProfileContext } from "@/lib/ai/prompts";
 import { AIRateLimitError, AIQuotaExceededError } from "@/lib/ai/types";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+import { decrementActiveStreams, incrementActiveStreams, recordResponseLatency, recordStreamDisconnect } from "@/lib/runtime/ops";
 
 const VALID_FEATURES = new Set<AIFeature>([
-  "doubt_solver", "video_summary", "quiz_generation",
-  "study_planner", "mock_analysis", "weak_area_recommendation", "daily_motivation",
+  "doubt_solver",
+  "video_summary",
+  "quiz_generation",
+  "study_planner",
+  "mock_analysis",
+  "weak_area_recommendation",
+  "daily_motivation",
 ]);
 
-const enc = new TextEncoder();
+const encoder = new TextEncoder();
 
 function sse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
 function sseBytes(event: string, data: unknown): Uint8Array {
-  return enc.encode(sse(event, data));
+  return encoder.encode(sse(event, data));
 }
 
 const SSE_HEADERS = {
-  "Content-Type":  "text/event-stream",
+  "Content-Type": "text/event-stream",
   "Cache-Control": "no-cache",
-  "Connection":    "keep-alive",
+  Connection: "keep-alive",
 } as const;
-
-// ── Body parsing helpers ──────────────────────────────────────────────────────
 
 function parseHistory(raw: unknown): HistoryMessage[] {
   if (!Array.isArray(raw)) return [];
-  return (raw
-    .filter((m): m is { role: string; content: string } =>
-      typeof m === "object" && m !== null &&
-      typeof (m as Record<string, unknown>).role === "string" &&
-      typeof (m as Record<string, unknown>).content === "string"
-    )
-    .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
-    .map((m) => ({ role: m.role === "USER" ? "user" : "assistant" as const, content: m.content }))
-    .slice(-8)) as HistoryMessage[];
+
+  return raw
+    .filter((message): message is { role: string; content: string } => {
+      return (
+        typeof message === "object" &&
+        message !== null &&
+        typeof (message as Record<string, unknown>).role === "string" &&
+        typeof (message as Record<string, unknown>).content === "string"
+      );
+    })
+    .filter((message) => message.role === "USER" || message.role === "ASSISTANT")
+    .map((message) => ({
+      role: message.role === "USER" ? "user" : "assistant",
+      content: message.content,
+    }))
+    .slice(-8) as HistoryMessage[];
 }
 
 function parseUserProfile(raw: unknown): UserProfileContext | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const u = raw as Record<string, unknown>;
+
+  const profile = raw as Record<string, unknown>;
   return {
-    name:             typeof u.name === "string" ? u.name : undefined,
-    targetPercentile: typeof u.targetPercentile === "number" ? u.targetPercentile : undefined,
-    weaknesses:       Array.isArray(u.weaknesses) ? (u.weaknesses as string[]).slice(0, 6) : undefined,
-    plan:             typeof u.plan === "string" ? u.plan : undefined,
-    studyHours:       typeof u.studyHours === "string" ? u.studyHours : undefined,
-    exams:            Array.isArray(u.exams) ? (u.exams as string[]) : undefined,
+    name: typeof profile.name === "string" ? profile.name : undefined,
+    targetPercentile: typeof profile.targetPercentile === "number" ? profile.targetPercentile : undefined,
+    weaknesses: Array.isArray(profile.weaknesses) ? (profile.weaknesses as string[]).slice(0, 6) : undefined,
+    plan: typeof profile.plan === "string" ? profile.plan : undefined,
+    studyHours: typeof profile.studyHours === "string" ? profile.studyHours : undefined,
+    exams: Array.isArray(profile.exams) ? (profile.exams as string[]) : undefined,
   };
 }
-
-// ── POST /api/ai/stream ───────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const { userId, plan, isAdmin } = extractSecureUser(req);
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
-  // Rate limit
   try {
     await checkRateLimit(ip, userId, plan);
-  } catch (err) {
-    if (err instanceof AIRateLimitError) {
-      return new Response(
-        sse("error", { code: "rate_limited", message: "Too many requests. Please slow down." }),
-        { status: 429, headers: SSE_HEADERS }
-      );
+  } catch (error) {
+    if (error instanceof AIRateLimitError) {
+      return new Response(sse("error", { code: "rate_limited", message: "Too many requests. Please slow down." }), {
+        status: 429,
+        headers: SSE_HEADERS,
+      });
     }
-    throw err;
+    throw error;
   }
 
-  // Parse body
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -89,8 +94,9 @@ export async function POST(req: NextRequest) {
     return new Response(sse("error", { code: "invalid_json" }), { status: 400, headers: SSE_HEADERS });
   }
 
-  const { feature, prompt } = body;
-  const history     = parseHistory(body.history);
+  const feature = body.feature;
+  const prompt = body.prompt;
+  const history = parseHistory(body.history);
   const userProfile = parseUserProfile(body.userProfile);
 
   if (typeof feature !== "string" || !VALID_FEATURES.has(feature as AIFeature)) {
@@ -100,37 +106,35 @@ export async function POST(req: NextRequest) {
     return new Response(sse("error", { code: "invalid_prompt" }), { status: 400, headers: SSE_HEADERS });
   }
 
-  // Content filter
   const filterResult = filterPrompt(prompt);
   if (filterResult.blocked) {
-    return new Response(
-      sse("error", { code: "content_blocked", reason: filterResult.reason }),
-      { status: 400, headers: SSE_HEADERS }
-    );
+    return new Response(sse("error", { code: "content_blocked", reason: filterResult.reason }), {
+      status: 400,
+      headers: SSE_HEADERS,
+    });
   }
 
   const trimmedPrompt = prompt.trim();
-  const typedFeature  = feature as AIFeature;
+  const typedFeature = feature as AIFeature;
+  const messages = buildMessages(typedFeature, trimmedPrompt, { history, userProfile });
 
-  // Cache check — stream cached value instantly
-  const cacheKey = history.length ? null : trimmedPrompt; // skip cache if has history (personalised)
+  const cacheKey = history.length ? null : trimmedPrompt;
   const cached = cacheKey ? await getCache(typedFeature, cacheKey) : null;
   if (cached) {
-    const stream = new ReadableStream({
+    const cachedStream = new ReadableStream({
       start(controller) {
         controller.enqueue(sseBytes("chunk", { text: cached }));
-        controller.enqueue(sseBytes("done",  { provider: "cache", cached: true }));
+        controller.enqueue(sseBytes("done", { provider: "cache", cached: true }));
         controller.close();
       },
     });
-    return new Response(stream, { headers: SSE_HEADERS });
+    return new Response(cachedStream, { headers: SSE_HEADERS });
   }
 
-  // Quota
   try {
     await checkAndConsumeQuota(userId, plan, typedFeature, isAdmin);
-  } catch (err) {
-    if (err instanceof AIQuotaExceededError) {
+  } catch (error) {
+    if (error instanceof AIQuotaExceededError) {
       return new Response(
         sse("error", {
           code: "quota_exceeded",
@@ -140,49 +144,69 @@ export async function POST(req: NextRequest) {
         { status: 429, headers: SSE_HEADERS }
       );
     }
-    throw err;
+    throw error;
   }
 
-  // Build context-enriched messages
-  const messages = buildMessages(typedFeature, trimmedPrompt, { history, userProfile });
+  const startedAt = Date.now();
+  incrementActiveStreams();
+  let disconnected = false;
 
-  // Streaming response
+  const abortHandler = () => {
+    if (disconnected) return;
+    disconnected = true;
+    recordStreamDisconnect();
+    decrementActiveStreams();
+  };
+
+  req.signal.addEventListener("abort", abortHandler, { once: true });
+
   const stream = new ReadableStream({
     async start(controller) {
       let fullText = "";
 
       try {
-        // Primary: Groq streaming with full context
         for await (const chunk of streamGroq(typedFeature, trimmedPrompt, messages)) {
           fullText += chunk;
           controller.enqueue(sseBytes("chunk", { text: chunk }));
         }
-        // Cache only context-free responses
+
         if (!history.length && cacheKey) {
           await setCache(typedFeature, cacheKey, fullText);
         }
-        controller.enqueue(sseBytes("done", { provider: "groq", cached: false }));
 
+        controller.enqueue(sseBytes("done", { provider: "groq", cached: false }));
       } catch {
-        // Signal fallback to client before attempting
         controller.enqueue(sseBytes("status", { message: "Trying backup AI model…" }));
 
         try {
           const result = await routeAI({
-            feature: typedFeature, prompt: trimmedPrompt,
-            userId, plan, isAdmin, skipQuota: true,
+            feature: typedFeature,
+            prompt: trimmedPrompt,
+            userId,
+            plan,
+            isAdmin,
+            skipQuota: true,
           });
           controller.enqueue(sseBytes("chunk", { text: result.text }));
-          controller.enqueue(sseBytes("done",  { provider: result.provider, cached: result.cached }));
+          controller.enqueue(sseBytes("done", { provider: result.provider, cached: result.cached }));
         } catch (fallbackErr) {
-          const message = fallbackErr instanceof Error
-            ? fallbackErr.message
-            : "AI mentor is warming up.";
+          const message = fallbackErr instanceof Error ? fallbackErr.message : "AI mentor is warming up.";
           controller.enqueue(sseBytes("error", { code: "all_failed", message }));
         }
       } finally {
         controller.close();
+        req.signal.removeEventListener("abort", abortHandler);
+        if (!disconnected) {
+          decrementActiveStreams();
+          recordResponseLatency(Date.now() - startedAt);
+        }
       }
+    },
+    cancel() {
+      if (disconnected) return;
+      disconnected = true;
+      recordStreamDisconnect();
+      decrementActiveStreams();
     },
   });
 

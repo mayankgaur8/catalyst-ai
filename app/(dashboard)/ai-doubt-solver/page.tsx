@@ -147,8 +147,16 @@ function ThinkingDots() {
 
 // ── Message Bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+interface MessageBubbleProps {
+  msg: ChatMessage;
+  userId?: string;
+  conversationId?: string;
+}
+
+function MessageBubble({ msg, userId, conversationId }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
+  const [remembered, setRemembered] = useState(false);
+  const [remembering, setRemembering] = useState(false);
   const isThinking = msg.streaming && !msg.content;
   const isStreaming = msg.streaming && !!msg.content;
 
@@ -156,6 +164,33 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     void navigator.clipboard.writeText(msg.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRemember = async () => {
+    if (!userId || remembered || remembering) return;
+    setRemembering(true);
+    try {
+      const endpoint = conversationId
+        ? `/api/conversations/${conversationId}/memory`
+        : "/api/memory";
+      await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+          "x-user-plan": "pro",
+          "x-user-role": "user",
+        },
+        body: JSON.stringify({
+          text: msg.content,
+          pin: false,
+          relatedTopics: ["ai-response"],
+        }),
+      });
+      setRemembered(true);
+    } catch { /* silently fail */ } finally {
+      setRemembering(false);
+    }
   };
 
   return (
@@ -228,6 +263,20 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 ? <Check size={12} className="text-green-400" />
                 : <Copy size={12} />
               }
+            </button>
+            <button
+              onClick={() => void handleRemember()}
+              disabled={remembered || remembering}
+              className={cn(
+                "flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] border transition-all",
+                remembered
+                  ? "bg-neon-purple/15 border-neon-purple/25 text-neon-purple"
+                  : "bg-white/5 border-white/8 text-white/25 hover:bg-neon-purple/10 hover:text-neon-purple hover:border-neon-purple/20"
+              )}
+              title="Remember this response"
+            >
+              {remembering ? <Loader2 size={10} className="animate-spin" /> : <Brain size={10} />}
+              {remembered ? "Remembered" : "Remember this"}
             </button>
           </div>
         )}
@@ -645,7 +694,7 @@ export default function AIDoubtSolverPage() {
             </div>
           )}
 
-          {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
+          {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} userId={user?.id} conversationId={activeConv?.id} />)}
           <div ref={messagesEndRef} />
         </div>
 

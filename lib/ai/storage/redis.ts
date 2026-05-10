@@ -3,11 +3,15 @@ import type { AIStorage } from "./types";
 let redisClient: import("ioredis").Redis | null = null;
 let initAttempted = false;
 
-function getClient(): import("ioredis").Redis | null {
+export function getRedisUrl(): string | null {
+  return process.env.REDIS_URL ?? null;
+}
+
+export function getRedisClient(): import("ioredis").Redis | null {
   if (initAttempted) return redisClient;
   initAttempted = true;
 
-  const url = process.env.REDIS_URL;
+  const url = getRedisUrl();
   if (!url) return null;
 
   try {
@@ -29,9 +33,19 @@ function getClient(): import("ioredis").Redis | null {
   return redisClient;
 }
 
+export async function pingRedis(): Promise<boolean> {
+  const client = getRedisClient();
+  if (!client) return false;
+  try {
+    return (await client.ping()) === "PONG";
+  } catch {
+    return false;
+  }
+}
+
 export class RedisStorage implements AIStorage {
   async get(key: string): Promise<string | null> {
-    const client = getClient();
+    const client = getRedisClient();
     if (!client) return null;
     try {
       return await client.get(key);
@@ -41,7 +55,7 @@ export class RedisStorage implements AIStorage {
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    const client = getClient();
+    const client = getRedisClient();
     if (!client) return;
     try {
       if (ttlSeconds) {
@@ -53,7 +67,7 @@ export class RedisStorage implements AIStorage {
   }
 
   async increment(key: string, ttlSeconds?: number): Promise<number> {
-    const client = getClient();
+    const client = getRedisClient();
     if (!client) return 0;
     try {
       const pipeline = client.pipeline();
@@ -68,7 +82,7 @@ export class RedisStorage implements AIStorage {
   }
 
   async delete(key: string): Promise<void> {
-    const client = getClient();
+    const client = getRedisClient();
     if (!client) return;
     try {
       await client.del(key);

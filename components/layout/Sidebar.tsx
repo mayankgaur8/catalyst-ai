@@ -7,7 +7,7 @@ import {
   LayoutDashboard, BookOpen, FileText, Brain,
   Trophy, Calendar, Video, Settings, ChevronLeft,
   Zap, Target, MessageSquare, Star, Crown,
-  BarChart2, Flame, X, LogOut, Lock, Shield
+  BarChart2, Flame, X, LogOut, Lock, Shield, Cpu
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore, useEffectivePlan } from "@/store/useAuthStore";
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { name: "Practice", href: "/practice", icon: BookOpen, section: "main", feature: "PRACTICE_BASIC" },
   { name: "Mock Tests", href: "/mock-tests", icon: FileText, section: "main", feature: "MOCK_BASIC" },
   { name: "AI Doubt Solver", href: "/ai-doubt-solver", icon: Brain, section: "ai", feature: "AI_DOUBT_SOLVER" },
+  { name: "AI Memory", href: "/memory", icon: Cpu, section: "ai", feature: "AI_DOUBT_SOLVER" },
   { name: "Study Planner", href: "/study-planner", icon: Calendar, section: "ai", feature: "STUDY_PLANNER" },
   { name: "Video Lessons", href: "/videos", icon: Video, section: "learn", feature: "VIDEO_LIBRARY" },
   { name: "GD / PI / WAT", href: "/gd-pi", icon: MessageSquare, section: "learn", feature: "GD_PI_PREP" },

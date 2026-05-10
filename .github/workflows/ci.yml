@@ -79,12 +79,12 @@ jobs:
       - name: Deploy to Vercel (preview)
         id: deploy
         run: |
-          npx vercel --token ${{ secrets.VERCEL_TOKEN }} \
-            --project ${{ secrets.VERCEL_PROJECT_ID }} \
-            --org ${{ secrets.VERCEL_ORG_ID }} \
-            --yes
+          url=$(npx vercel --yes 2>/dev/null | tail -1)
+          echo "preview-url=$url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
   # ── Deploy Production (Vercel) ───────────────────────────────────────────────
   deploy-production:
@@ -103,10 +103,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Deploy to Vercel (production)
-        run: |
-          npx vercel --token ${{ secrets.VERCEL_TOKEN }} \
-            --project ${{ secrets.VERCEL_PROJECT_ID }} \
-            --org ${{ secrets.VERCEL_ORG_ID }} \
-            --prod --yes
+        run: npx vercel --prod --yes
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

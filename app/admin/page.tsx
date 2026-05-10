@@ -216,6 +216,11 @@ export default function AdminPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/admin/system">
+            <button className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 text-sm hover:text-white transition-all">
+              <Activity className="w-3.5 h-3.5" /> System
+            </button>
+          </Link>
           <Link href="/dashboard">
             <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 text-sm hover:text-white transition-all">
               <ArrowLeft className="w-3.5 h-3.5" /> Dashboard

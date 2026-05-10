@@ -357,6 +357,7 @@ model Message {
   conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role            MessageRole
   content         String      @db.Text
+  embedding       Json?       // JSON vector for semantic memory experiments
   metadata        Json?       // Provider info, tokens, latency, model, etc.
   feedback        String?     // user|helpful|unhelpful|flagged
   flagReason      String?
@@ -384,6 +385,7 @@ model Memory {
   conversation        Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   
   summary             String    @db.Text  // Long-term memory summary
+  embedding           Json?     // JSON vector for semantic similarity search
   isManuallyPinned    Boolean   @default(false)
   relatedTopics       String[]  @default([])
   mentionCount        Int       @default(1)
