@@ -373,7 +373,7 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v5",
-    youtubeId: null,
+    youtubeId: "VkbKwW3ifb0",
     title: "Algebra Shortcuts You Never Knew Existed",
     instructor: "Rajiv Mehta",
     description: "Speed-up your algebra solving with non-obvious shortcuts and pattern recognition techniques.",

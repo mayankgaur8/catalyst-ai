@@ -52,7 +52,14 @@ export default function VideoCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="glass rounded-2xl border border-white/5 overflow-hidden group card-hover focus-within:border-neon-blue/30"
+      whileHover={{ y: -4 }}
+      className={cn(
+        "glass rounded-2xl border border-white/5 overflow-hidden group",
+        "focus-within:border-neon-blue/30",
+        "transition-all duration-300",
+        "group-hover:shadow-[0_0_30px_rgba(0,212,255,0.15)]",
+        "group-hover:border-neon-blue/20"
+      )}
       aria-label={video.title}
     >
       {/* Thumbnail */}
@@ -79,7 +86,7 @@ export default function VideoCard({
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
             className={cn(
-              "object-cover transition-all duration-500 group-hover:scale-105",
+              "object-cover transition-all duration-500 group-hover:scale-105 group-hover:brightness-75",
               thumbLoaded ? "opacity-100" : "opacity-0"
             )}
             loading="lazy"
@@ -95,23 +102,30 @@ export default function VideoCard({
           disabled={!canAccess}
           aria-label={canAccess ? `Play ${video.title}` : `Upgrade to ${video.access.toUpperCase()} to access ${video.title}`}
           className={cn(
-            "absolute inset-0 flex items-center justify-center transition-all duration-200",
-            "bg-black/0 hover:bg-black/40 focus:bg-black/40",
+            "absolute inset-0 flex items-center justify-center transition-all duration-300",
+            "bg-black/0 group-hover:bg-black/50 group-focus-within:bg-black/50",
             !canAccess && "cursor-not-allowed"
           )}
         >
-          <div className={cn(
-            "w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-200",
-            "opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100",
-            canAccess
-              ? "bg-neon-blue/80 neon-play-btn"
-              : "bg-white/15"
-          )}>
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            whileHover={canAccess ? { scale: 1.1, opacity: 1 } : undefined}
+            whileTap={canAccess ? { scale: 0.95 } : undefined}
+            animate={canAccess ? { scale: [0.95, 1.05, 0.95], opacity: 1 } : { scale: 1, opacity: 0.7 }}
+            transition={canAccess ? { duration: 2, repeat: Infinity, delay: 0.2 } : {}}
+            className={cn(
+              "w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-md transition-all duration-200",
+              "shadow-lg",
+              canAccess
+                ? "bg-gradient-to-br from-neon-blue to-neon-purple shadow-[0_0_30px_rgba(0,212,255,0.4)]"
+                : "bg-white/15 shadow-[0_0_15px_rgba(255,255,255,0.1)]"
+            )}
+          >
             {canAccess
               ? <Play size={22} className="text-white ml-1" fill="white" />
               : <Lock size={18} className="text-white" />
             }
-          </div>
+          </motion.div>
         </button>
 
         {/* Access badge */}
