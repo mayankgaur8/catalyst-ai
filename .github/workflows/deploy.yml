@@ -1,10 +1,8 @@
 name: Deploy
 
+# Disabled: Vercel production deploy is handled by ci.yml.
+# Kept as manual-only fallback.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 env:

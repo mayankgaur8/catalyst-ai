@@ -1,0 +1,79 @@
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: azure-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy to Azure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (standalone)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+
+      # ── Verify standalone output exists ─────────────────────────────────────
+      - name: Verify standalone output
+        run: |
+          echo "=== Checking standalone output ==="
+          test -f .next/standalone/server.js || { echo "ERROR: .next/standalone/server.js not found"; exit 1; }
+          test -d .next/static              || { echo "ERROR: .next/static not found"; exit 1; }
+          echo "✓ Standalone output verified"
+
+      # ── Package deployment artifact ──────────────────────────────────────────
+      - name: Package deployment artifact
+        run: |
+          rm -rf deploy
+          mkdir -p deploy
+
+          # Copy standalone server + node_modules (Next.js bundles these)
+          cp -R .next/standalone/. deploy/
+
+          # Copy static assets into expected location inside deploy/.next/static
+          mkdir -p deploy/.next/static
+          cp -R .next/static/. deploy/.next/static/
+
+          # Copy public folder (images, fonts, robots.txt, etc.)
+          if [ -d public ]; then
+            cp -R public/. deploy/public/
+          fi
+
+      # ── Verify packaged artifact ─────────────────────────────────────────────
+      - name: Verify packaged artifact
+        run: |
+          echo "=== Verifying deploy/ structure ==="
+          test -f deploy/server.js          || { echo "ERROR: deploy/server.js missing"; exit 1; }
+          test -d deploy/.next/static       || { echo "ERROR: deploy/.next/static missing"; exit 1; }
+          echo "✓ deploy/server.js confirmed"
+          echo "✓ deploy/.next/static confirmed"
+          echo ""
+          echo "=== Top-level files in deploy/ ==="
+          find deploy -maxdepth 3 -type f | sort | head -60
+
+      # ── Deploy to Azure App Service ──────────────────────────────────────────
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: catalyst-ai-mayank
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./deploy
