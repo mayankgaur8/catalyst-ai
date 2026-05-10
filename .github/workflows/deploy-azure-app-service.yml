@@ -41,66 +41,64 @@ jobs:
 
       - name: Verify Next standalone output
         run: |
-          echo "Checking standalone output..."
           test -f .next/standalone/server.js || { echo "FATAL: .next/standalone/server.js missing"; exit 1; }
           test -d .next/static               || { echo "FATAL: .next/static missing"; exit 1; }
-          find .next/standalone -maxdepth 3 -name "server.js" -print
-          echo "Standalone output OK"
+          echo "Standalone OK: $(find .next/standalone -maxdepth 1 -name server.js)"
 
       - name: Prepare Azure deployment package
         run: |
           rm -rf deploy
           mkdir -p deploy
 
-          echo "Copying standalone output..."
           cp -R .next/standalone/. deploy/
 
-          echo "Copying static assets..."
           mkdir -p deploy/.next/static
           cp -R .next/static/. deploy/.next/static/
 
-          echo "Copying public assets..."
           if [ -d public ]; then
             mkdir -p deploy/public
             cp -R public/. deploy/public/
           fi
 
-          echo "Creating compatibility wrapper..."
           mkdir -p deploy/standalone
           printf 'require("../server.js")\n' > deploy/standalone/server.js
 
-          echo "Replacing full package.json with minimal stub..."
-          cat > deploy/package.json << 'PKGJSON'
-          {
-            "name": "catprep",
-            "version": "0.1.0",
-            "scripts": {
-              "start": "node server.js"
-            }
-          }
-          PKGJSON
+          node -e "
+            var fs = require('fs');
+            var pkg = { name: 'catprep', version: '0.1.0', scripts: { start: 'node server.js' } };
+            fs.writeFileSync('deploy/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            var lock = { name: 'catprep', version: '0.1.0', lockfileVersion: 3, requires: true, packages: {} };
+            fs.writeFileSync('deploy/package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+            console.log('Wrote minimal package.json and package-lock.json');
+          "
 
-          echo "Deploy package preview (top 60 files):"
-          find deploy -maxdepth 4 -type f | sort | head -60
-
-      - name: Verify Azure deployment package
+      - name: Verify deployment package
         run: |
-          echo "Verifying required files..."
           test -f deploy/server.js            || { echo "FATAL: deploy/server.js missing"; exit 1; }
           test -f deploy/standalone/server.js  || { echo "FATAL: deploy/standalone/server.js missing"; exit 1; }
           test -d deploy/.next/static         || { echo "FATAL: deploy/.next/static missing"; exit 1; }
-          echo "package.json start script:"
-          node -e "const p=require('./deploy/package.json');console.log(p.scripts.start)"
-          echo "All required files present"
+          START=$(node -e "process.stdout.write(require('./deploy/package.json').scripts.start)")
+          [ "$START" = "node server.js" ] || { echo "FATAL: package.json start='$START'"; exit 1; }
+          echo "Package verified — start=$START"
 
       - name: Zip deployment package
         run: |
           cd deploy
           zip -r -y ../deploy.zip .
           cd ..
+
+      - name: Verify zip structure
+        run: |
           echo "Zip size: $(du -sh deploy.zip | cut -f1)"
-          echo "server.js entries in zip:"
+          echo "--- server.js entries ---"
           unzip -l deploy.zip | grep "server\.js"
+          echo "--- package.json in zip ---"
+          unzip -p deploy.zip package.json
+          unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'server\.js' \
+            || { echo "FATAL: server.js NOT at zip root"; exit 1; }
+          unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'standalone/server\.js' \
+            || { echo "FATAL: standalone/server.js missing"; exit 1; }
+          echo "Zip structure OK"
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
