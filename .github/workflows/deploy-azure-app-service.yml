@@ -32,40 +32,56 @@ jobs:
         env:
           NEXT_PUBLIC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
 
-      - name: Verify standalone build exists
+      - name: Verify Next standalone output
         run: |
           test -f .next/standalone/server.js
+          echo "Standalone server exists"
+          find .next/standalone -maxdepth 2 -name "server.js" -print
           test -d .next/static
 
-      - name: Prepare deployment package
+      - name: Prepare Azure deployment package
         run: |
           rm -rf deploy
           mkdir -p deploy
 
-          # Copy standalone server
+          echo "Copying standalone output..."
           cp -R .next/standalone/. deploy/
 
-          # Copy static assets
+          echo "Copying static assets..."
           mkdir -p deploy/.next/static
           cp -R .next/static/. deploy/.next/static/
 
-          # Copy public folder
+          echo "Copying public assets..."
           if [ -d public ]; then
             mkdir -p deploy/public
             cp -R public/. deploy/public/
           fi
 
-          # Compatibility fallback
+          echo "Creating compatibility wrapper..."
           mkdir -p deploy/standalone
           cat > deploy/standalone/server.js <<'EOF'
           require("../server.js")
           EOF
 
-          echo "DEPLOY CONTENTS:"
-          find deploy -maxdepth 3 -type f | sort
+          echo "Final deploy package:"
+          find deploy -maxdepth 4 -type f | sort | head -100
 
-          echo "VERIFY ROOT SERVER:"
           test -f deploy/server.js
+          test -f deploy/standalone/server.js
+          test -d deploy/.next/static
+
+      - name: Verify deployment package before upload
+        run: |
+          echo "Deploy folder:"
+          pwd
+          ls -la deploy
+          echo "Find server files:"
+          find deploy -maxdepth 4 -name "server.js" -print
+          echo "Verify required files:"
+          test -f deploy/server.js
+          test -f deploy/standalone/server.js
+          test -d deploy/.next/static
+          echo "Deployment package verified successfully"
 
       - name: Fail if deploy/server.js missing
         run: |
@@ -75,7 +91,7 @@ jobs:
           fi
 
       # ── Deploy to Azure App Service ──────────────────────────────────────────
-      - name: Deploy to Azure
+      - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: catalyst-ai-mayank
