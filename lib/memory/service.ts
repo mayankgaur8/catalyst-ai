@@ -76,7 +76,7 @@ export async function searchMemories(userId: string, query: string, limit = 5) {
 
   if (ranked.length > 0) {
     await prisma.memory.updateMany({
-      where: { id: { in: ranked.map((item) => item.memory.id) } },
+      where: { id: { in: ranked.map((item: RankedMemory) => item.memory.id) } },
       data: { lastAccessedAt: new Date() },
     });
   }

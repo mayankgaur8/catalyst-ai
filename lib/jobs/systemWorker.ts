@@ -139,7 +139,7 @@ async function handleAnalyzeWeakAreas(data: SystemJobPayload) {
 
   const memories = await searchMemories(userId, "weak struggle difficulty hard", 10);
   const weakTopics = memories
-    .map((m) => m.memory.relatedTopics)
+    .map((m: Awaited<ReturnType<typeof searchMemories>>[number]) => m.memory.relatedTopics)
     .flat()
     .filter(Boolean)
     .slice(0, 5);
