@@ -59,8 +59,28 @@ export function resolveVideos(
   options?: { includeDeleted?: boolean }
 ): VideoLesson[] {
   const source = adminVideos ?? defaultVideos;
-  if (options?.includeDeleted) return source;
-  return source.filter((v) => v.deletedAt === null);
+
+  // Backfill legacy/persisted admin overrides with updated default metadata.
+  const defaultsById = new Map(defaultVideos.map((video) => [video.id, video] as const));
+  const normalized = source.map((video) => {
+    const base = defaultsById.get(video.id);
+    if (!base) return video;
+
+    return {
+      ...base,
+      ...video,
+      youtubeId: video.youtubeId ?? base.youtubeId,
+      description: video.description?.trim() ? video.description : base.description,
+      tags: video.tags?.length ? video.tags : base.tags,
+      aiSummary: video.aiSummary ?? base.aiSummary,
+      keyTakeaways: video.keyTakeaways?.length ? video.keyTakeaways : base.keyTakeaways,
+      quiz: video.quiz?.length ? video.quiz : base.quiz,
+      xpToastMessage: video.xpToastMessage ?? base.xpToastMessage,
+    };
+  });
+
+  if (options?.includeDeleted) return normalized;
+  return normalized.filter((v) => v.deletedAt === null);
 }
 
 /** Returns true if userPlan can access a video with requiredAccess */
