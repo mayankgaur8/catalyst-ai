@@ -6,7 +6,9 @@ import { checkAndConsumeQuota } from "@/lib/ai/quota";
 import { getCache, setCache } from "@/lib/ai/cache";
 import { streamGroq } from "@/lib/ai/providers/groq";
 import { routeAI } from "@/lib/ai/aiRouter";
+import { buildMessages } from "@/lib/ai/prompts";
 import type { AIFeature } from "@/lib/ai/types";
+import type { HistoryMessage, UserProfileContext } from "@/lib/ai/prompts";
 import { AIRateLimitError, AIQuotaExceededError } from "@/lib/ai/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,6 +33,34 @@ const SSE_HEADERS = {
   "Cache-Control": "no-cache",
   "Connection":    "keep-alive",
 } as const;
+
+// ── Body parsing helpers ──────────────────────────────────────────────────────
+
+function parseHistory(raw: unknown): HistoryMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m): m is { role: string; content: string } =>
+      typeof m === "object" && m !== null &&
+      typeof (m as Record<string, unknown>).role === "string" &&
+      typeof (m as Record<string, unknown>).content === "string"
+    )
+    .filter((m) => m.role === "user" || m.role === "ai")
+    .map((m) => ({ role: m.role as "user" | "ai", content: m.content }))
+    .slice(-8);
+}
+
+function parseUserProfile(raw: unknown): UserProfileContext | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const u = raw as Record<string, unknown>;
+  return {
+    name:             typeof u.name === "string" ? u.name : undefined,
+    targetPercentile: typeof u.targetPercentile === "number" ? u.targetPercentile : undefined,
+    weaknesses:       Array.isArray(u.weaknesses) ? (u.weaknesses as string[]).slice(0, 6) : undefined,
+    plan:             typeof u.plan === "string" ? u.plan : undefined,
+    studyHours:       typeof u.studyHours === "string" ? u.studyHours : undefined,
+    exams:            Array.isArray(u.exams) ? (u.exams as string[]) : undefined,
+  };
+}
 
 // ── POST /api/ai/stream ───────────────────────────────────────────────────────
 
@@ -60,6 +90,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { feature, prompt } = body;
+  const history     = parseHistory(body.history);
+  const userProfile = parseUserProfile(body.userProfile);
 
   if (typeof feature !== "string" || !VALID_FEATURES.has(feature as AIFeature)) {
     return new Response(sse("error", { code: "invalid_feature" }), { status: 400, headers: SSE_HEADERS });
@@ -80,8 +112,9 @@ export async function POST(req: NextRequest) {
   const trimmedPrompt = prompt.trim();
   const typedFeature  = feature as AIFeature;
 
-  // Cache check — stream the cached value instantly
-  const cached = await getCache(typedFeature, trimmedPrompt);
+  // Cache check — stream cached value instantly
+  const cacheKey = history.length ? null : trimmedPrompt; // skip cache if has history (personalised)
+  const cached = cacheKey ? await getCache(typedFeature, cacheKey) : null;
   if (cached) {
     const stream = new ReadableStream({
       start(controller) {
@@ -99,12 +132,19 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof AIQuotaExceededError) {
       return new Response(
-        sse("error", { code: "quota_exceeded", message: "You've reached your daily AI request limit." }),
+        sse("error", {
+          code: "quota_exceeded",
+          message: "You've reached your daily AI request limit.",
+          uiMessage: "Daily AI limit reached. Upgrade to Pro for more requests, or try again tomorrow.",
+        }),
         { status: 429, headers: SSE_HEADERS }
       );
     }
     throw err;
   }
+
+  // Build context-enriched messages
+  const messages = buildMessages(typedFeature, trimmedPrompt, { history, userProfile });
 
   // Streaming response
   const stream = new ReadableStream({
@@ -112,16 +152,21 @@ export async function POST(req: NextRequest) {
       let fullText = "";
 
       try {
-        // Primary: Groq streaming
-        for await (const chunk of streamGroq(typedFeature, trimmedPrompt)) {
+        // Primary: Groq streaming with full context
+        for await (const chunk of streamGroq(typedFeature, trimmedPrompt, messages)) {
           fullText += chunk;
           controller.enqueue(sseBytes("chunk", { text: chunk }));
         }
-        await setCache(typedFeature, trimmedPrompt, fullText);
+        // Cache only context-free responses
+        if (!history.length && cacheKey) {
+          await setCache(typedFeature, cacheKey, fullText);
+        }
         controller.enqueue(sseBytes("done", { provider: "groq", cached: false }));
 
       } catch {
-        // Fallback: routeAI waterfall (quota already consumed — skipQuota)
+        // Signal fallback to client before attempting
+        controller.enqueue(sseBytes("status", { message: "Trying backup AI model…" }));
+
         try {
           const result = await routeAI({
             feature: typedFeature, prompt: trimmedPrompt,

@@ -7,6 +7,8 @@ import { checkRateLimit } from "@/lib/ai/rateLimiter";
 import { filterPrompt } from "@/lib/ai/contentFilter";
 import { getMetricsSummary } from "@/lib/ai/metrics";
 import { getAllHealth } from "@/lib/ai/circuitBreaker";
+import { clearCache } from "@/lib/ai/cache";
+import { ensureAIEnvironment } from "@/lib/ai/startup";
 import type { AIFeature } from "@/lib/ai/types";
 import {
   AIQuotaExceededError,
@@ -24,6 +26,7 @@ const VALID_FEATURES = new Set<AIFeature>([
 // ── POST /api/ai — main inference endpoint ────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  ensureAIEnvironment();
   const { userId, plan, isAdmin } = extractSecureUser(req);
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
@@ -152,4 +155,15 @@ export async function GET(req: NextRequest) {
     { error: "bad_request", message: "Use ?type=quota, ?type=logs, ?type=metrics, or ?type=health (admin only)" },
     { status: 400 }
   );
+}
+
+// ── DELETE /api/ai — admin cache clear ───────────────────────────────────────
+
+export async function DELETE(req: NextRequest) {
+  ensureAIEnvironment();
+  const { isAdmin } = extractSecureUser(req);
+  if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+  clearCache();
+  return NextResponse.json({ success: true, message: "In-process cache cleared." });
 }

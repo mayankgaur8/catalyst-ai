@@ -11,6 +11,7 @@ import {
   CheckCircle, AlertCircle, Sparkles, GraduationCap, Lock,
   Mic, Users, Video, Crown, BarChart2, Zap
 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useGameStore } from "@/store/useGameStore";
 import { canAccess } from "@/lib/features";
@@ -38,7 +39,6 @@ const radarData = [
   { subject: "Stamina", score: 60 },
 ];
 
-const quote = getRandomQuote();
 
 function StatCard({ label, value, sub, icon: Icon, color, trend, locked }: {
   label: string; value: string | number; sub: string;
@@ -108,6 +108,42 @@ export default function DashboardPage() {
 
   const activePlan = plan ?? "free";
   const targetPercentile = onboardingData?.targetPercentile ?? 95;
+
+  const [quote, setQuote] = useState(getRandomQuote);
+
+  useEffect(() => {
+    const fetchMotivation = async () => {
+      try {
+        const res = await fetch("/api/ai", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id":   user?.id ?? "anonymous",
+            "x-user-plan": plan ?? "free",
+          },
+          body: JSON.stringify({
+            feature: "daily_motivation",
+            prompt:  `Give a single powerful motivational quote for a serious CAT aspirant targeting the ${targetPercentile}th percentile. Format exactly as: "Quote text" — Author Name. Make it relevant to disciplined exam preparation, consistency, or growth mindset. No extra text.`,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json() as { text: string };
+          const raw = data.text.trim();
+          const dashIdx = raw.lastIndexOf("—");
+          if (dashIdx > 0) {
+            setQuote({
+              quote:  raw.slice(0, dashIdx).trim().replace(/^[""]|[""]$/g, ""),
+              author: raw.slice(dashIdx + 1).trim(),
+            });
+          } else {
+            setQuote({ quote: raw.replace(/^[""]|[""]$/g, ""), author: "CATalyst AI" });
+          }
+        }
+      } catch { /* keep default random quote */ }
+    };
+    void fetchMotivation();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const canAccessDeepAnalytics = canAccess(activePlan, "ANALYTICS_DEEP");
   const canAccessAIMentor = canAccess(activePlan, "AI_MENTOR");

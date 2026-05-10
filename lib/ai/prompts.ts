@@ -53,20 +53,115 @@ Deliver:
 Keep it authentic, high-energy, and CAT-specific — not generic life advice.`,
 };
 
-// ── Prompt builders ───────────────────────────────────────────────────────────
+// ── Context types ─────────────────────────────────────────────────────────────
 
-/** Returns OpenAI-style messages array (for Groq / OpenRouter). */
-export function buildMessages(
-  feature: AIFeature,
-  userPrompt: string
-): Array<{ role: "system" | "user"; content: string }> {
-  return [
-    { role: "system", content: SYSTEM_PROMPTS[feature] },
-    { role: "user", content: userPrompt },
-  ];
+export interface HistoryMessage {
+  role: "user" | "ai";
+  content: string;
 }
 
-/** Returns a single combined prompt string (for Gemini / Ollama). */
-export function buildSinglePrompt(feature: AIFeature, userPrompt: string): string {
-  return `${SYSTEM_PROMPTS[feature]}\n\n---\n\n${userPrompt}`;
+export interface UserProfileContext {
+  name?: string;
+  targetPercentile?: number;
+  weaknesses?: string[];
+  plan?: string;
+  exams?: string[];
+  studyHours?: string;
+}
+
+type ChatRole = "system" | "user" | "assistant";
+type ChatMessage = { role: ChatRole; content: string };
+
+// ── Context builders ──────────────────────────────────────────────────────────
+
+const MAX_HISTORY_CHARS = 2800;
+const MAX_MSG_CHARS     = 480;
+
+function buildProfileLine(profile: UserProfileContext): string {
+  const parts: string[] = [];
+  if (profile.name)             parts.push(`Student: ${profile.name}`);
+  if (profile.targetPercentile) parts.push(`Target: ${profile.targetPercentile}th percentile`);
+  if (profile.weaknesses?.length) parts.push(`Weak areas: ${profile.weaknesses.slice(0, 4).join(", ")}`);
+  if (profile.plan)             parts.push(`Plan: ${profile.plan}`);
+  if (profile.studyHours)       parts.push(`Study: ${profile.studyHours}h/day`);
+  return parts.length ? `[Context — ${parts.join(" | ")}]` : "";
+}
+
+function truncateHistory(history: HistoryMessage[]): HistoryMessage[] {
+  const recent = history.slice(-8).map((m) => ({
+    role: m.role,
+    content: m.content.length > MAX_MSG_CHARS
+      ? m.content.slice(0, MAX_MSG_CHARS) + "…"
+      : m.content,
+  }));
+  // Trim from front if total chars exceed limit
+  let total = recent.reduce((s, m) => s + m.content.length, 0);
+  while (total > MAX_HISTORY_CHARS && recent.length > 1) {
+    const removed = recent.shift();
+    total -= removed?.content.length ?? 0;
+  }
+  return recent;
+}
+
+// ── Prompt builders ───────────────────────────────────────────────────────────
+
+export interface PromptOptions {
+  history?: HistoryMessage[];
+  userProfile?: UserProfileContext;
+}
+
+/**
+ * Returns OpenAI-style messages array (for Groq / OpenRouter).
+ * Injects conversation history as proper user/assistant turns.
+ * Prepends a profile context line to the system prompt when available.
+ */
+export function buildMessages(
+  feature: AIFeature,
+  userPrompt: string,
+  options?: PromptOptions
+): ChatMessage[] {
+  const profileLine = options?.userProfile
+    ? buildProfileLine(options.userProfile)
+    : "";
+
+  const systemContent = profileLine
+    ? `${SYSTEM_PROMPTS[feature]}\n\n${profileLine}`
+    : SYSTEM_PROMPTS[feature];
+
+  const messages: ChatMessage[] = [{ role: "system", content: systemContent }];
+
+  if (options?.history?.length) {
+    const safe = truncateHistory(options.history);
+    for (const m of safe) {
+      messages.push({ role: m.role === "user" ? "user" : "assistant", content: m.content });
+    }
+  }
+
+  messages.push({ role: "user", content: userPrompt });
+  return messages;
+}
+
+/**
+ * Returns a single combined prompt string (for Gemini / Ollama).
+ * Prepends history as a labelled block when available.
+ */
+export function buildSinglePrompt(
+  feature: AIFeature,
+  userPrompt: string,
+  options?: PromptOptions
+): string {
+  const profileLine = options?.userProfile ? buildProfileLine(options.userProfile) : "";
+  const system = profileLine
+    ? `${SYSTEM_PROMPTS[feature]}\n\n${profileLine}`
+    : SYSTEM_PROMPTS[feature];
+
+  if (options?.history?.length) {
+    const safe = truncateHistory(options.history);
+    const historyBlock = safe
+      .map((m) => `[${m.role === "user" ? "Student" : "AI"}]: ${m.content}`)
+      .join("\n");
+    return `${system}\n\n--- Conversation so far ---\n${historyBlock}\n---\n\n${userPrompt}`;
+  }
+
+  return `${system}\n\n---\n\n${userPrompt}`;
 }

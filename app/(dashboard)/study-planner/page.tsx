@@ -4,9 +4,10 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import {
   Calendar, Brain, Clock, Target, ChevronRight, Check,
-  Sparkles, BookOpen, RefreshCw, Zap, TrendingUp, BarChart2
+  Sparkles, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/useAuthStore";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -81,9 +82,11 @@ const sectionColors: Record<string, string> = {
 };
 
 export default function StudyPlannerPage() {
+  const { user, plan } = useAuthStore();
   const [selectedDay, setSelectedDay] = useState(0);
   const [regenerating, setRegenerating] = useState(false);
-  const [view, setView] = useState<"week" | "month">("week");
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiError, setAiError] = useState(false);
 
   const todayPlan = WEEKLY_PLAN[selectedDay];
   const totalMinutes = WEEKLY_PLAN.reduce((acc, day) => acc + day.tasks.reduce((a, t) => a + t.duration, 0), 0);
@@ -92,8 +95,32 @@ export default function StudyPlannerPage() {
 
   const handleRegenerate = async () => {
     setRegenerating(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setRegenerating(false);
+    setAiInsight(null);
+    setAiError(false);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id":   user?.id ?? "anonymous",
+          "x-user-plan": plan ?? "free",
+        },
+        body: JSON.stringify({
+          feature: "study_planner",
+          prompt: `I am a CAT aspirant with the following weekly schedule: ${totalTasks} tasks across 7 days, ${Math.floor(totalMinutes / 60)} hours total study time. Completed tasks: ${completedTasks}/${totalTasks}. Please analyze this schedule and provide 3-4 specific, actionable improvements to optimize my CAT preparation. Focus on balancing QA, VARC, and DILR. Be concise and specific.`,
+        }),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      if (res.ok && typeof data.text === "string") {
+        setAiInsight(data.text);
+      } else {
+        setAiError(true);
+      }
+    } catch {
+      setAiError(true);
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   return (
@@ -141,21 +168,32 @@ export default function StudyPlannerPage() {
         animate={{ opacity: 1 }}
         className="p-4 rounded-2xl border border-neon-blue/20 bg-gradient-to-r from-neon-blue/8 to-neon-purple/5 flex items-start gap-3"
       >
-        <Brain size={20} className="text-neon-blue flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-neon-blue mb-1">AI Plan Update</p>
-          <p className="text-sm text-white/60">
-            Based on your mock analysis, I&apos;ve added extra DILR sessions this week. Your P&C score improved, so I&apos;ve reduced those sessions. Focus more on Games & Tournaments — it&apos;s your biggest weak spot.
+        <Brain size={20} className={cn("flex-shrink-0 mt-0.5", regenerating ? "text-white/30 animate-pulse" : "text-neon-blue")} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-neon-blue mb-1">
+            {regenerating ? "Analyzing your schedule…" : "AI Plan Insights"}
           </p>
+          {aiError ? (
+            <p className="text-sm text-red-400/80">
+              AI mentor is warming up. Click &ldquo;Regenerate Plan&rdquo; to try again.
+            </p>
+          ) : aiInsight ? (
+            <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">{aiInsight}</p>
+          ) : (
+            <p className="text-sm text-white/60">
+              {regenerating
+                ? "Generating personalized plan improvements…"
+                : "Click “Regenerate Plan” to get AI-powered recommendations tailored to your progress."}
+            </p>
+          )}
         </div>
-        <Sparkles size={16} className="text-neon-blue flex-shrink-0" />
+        <Sparkles size={16} className={cn("flex-shrink-0", regenerating ? "animate-spin text-white/30" : "text-neon-blue")} />
       </motion.div>
 
       {/* Day Selector */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {WEEKLY_PLAN.map((day, i) => {
           const dayDone = day.tasks.filter(t => t.done).length;
-          const dayTotal = day.tasks.length;
           return (
             <button
               key={i}

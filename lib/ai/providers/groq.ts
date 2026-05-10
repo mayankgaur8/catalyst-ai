@@ -6,6 +6,8 @@ const PROVIDER = "groq" as const;
 const TIMEOUT  = 15_000;
 const API_URL  = "https://api.groq.com/openai/v1/chat/completions";
 
+type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+
 interface GroqResponse {
   choices: Array<{ message: { content: string } }>;
   usage?: { total_tokens: number };
@@ -65,10 +67,14 @@ interface GroqStreamChunk {
 
 /**
  * Streams tokens from Groq using SSE.
- * Yields text chunks as they arrive; caller assembles the full text.
- * Throws AIProviderError on HTTP error or timeout.
+ * Accepts optional pre-built messages (with conversation history + personalization).
+ * Falls back to buildMessages(feature, prompt) when messages are not provided.
  */
-export async function* streamGroq(feature: AIFeature, prompt: string): AsyncGenerator<string> {
+export async function* streamGroq(
+  feature: AIFeature,
+  prompt: string,
+  prebuiltMessages?: ChatMsg[]
+): AsyncGenerator<string> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new AIProviderError("GROQ_API_KEY not configured", PROVIDER);
 
@@ -83,7 +89,7 @@ export async function* streamGroq(feature: AIFeature, prompt: string): AsyncGene
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        messages:    buildMessages(feature, prompt),
+        messages:    prebuiltMessages ?? buildMessages(feature, prompt),
         max_tokens:  1024,
         temperature: 0.7,
         stream:      true,
