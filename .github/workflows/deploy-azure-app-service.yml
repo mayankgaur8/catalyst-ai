@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy:
     name: Build & Deploy to Azure
     runs-on: ubuntu-latest
 
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -30,17 +30,26 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Build Next.js app
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test
+
+      - name: Build Next app
         run: npm run build
         env:
           NEXT_PUBLIC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
 
       - name: Verify Next standalone output
         run: |
+          echo "Checking .next standalone output..."
           test -f .next/standalone/server.js
-          echo "Standalone server exists"
-          find .next/standalone -maxdepth 2 -name "server.js" -print
           test -d .next/static
+          find .next/standalone -maxdepth 3 -name "server.js" -print
 
       - name: Prepare Azure deployment package
         run: |
@@ -62,38 +71,19 @@ jobs:
 
           echo "Creating compatibility wrapper..."
           mkdir -p deploy/standalone
-          cat > deploy/standalone/server.js <<'EOF'
-          require("../server.js")
-          EOF
+          printf 'require("../server.js")\n' > deploy/standalone/server.js
 
-          echo "Final deploy package:"
-          find deploy -maxdepth 4 -type f | sort | head -100
+          echo "Deploy package preview:"
+          find deploy -maxdepth 4 -type f | sort | head -120
 
-          test -f deploy/server.js
-          test -f deploy/standalone/server.js
-          test -d deploy/.next/static
-
-      - name: Verify deployment package before upload
+      - name: Verify Azure deployment package
         run: |
-          echo "Deploy folder:"
-          pwd
-          ls -la deploy
-          echo "Find server files:"
-          find deploy -maxdepth 4 -name "server.js" -print
-          echo "Verify required files:"
+          echo "Verifying required deployment files..."
           test -f deploy/server.js
           test -f deploy/standalone/server.js
           test -d deploy/.next/static
           echo "Deployment package verified successfully"
 
-      - name: Fail if deploy/server.js missing
-        run: |
-          if [ ! -f deploy/server.js ]; then
-            echo "ERROR: deploy/server.js missing"
-            exit 1
-          fi
-
-      # ── Deploy to Azure App Service ──────────────────────────────────────────
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
