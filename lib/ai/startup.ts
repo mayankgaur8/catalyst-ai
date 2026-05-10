@@ -5,6 +5,12 @@
 
 let initialized = false;
 
+/** Mask a key value for safe logging — never logs the actual secret. */
+function maskKey(value: string | undefined): string {
+  if (!value) return "❌ MISSING";
+  return `✅ configured (${value.slice(0, 4)}…)`;
+}
+
 export function ensureAIEnvironment(): void {
   if (initialized) return;
   initialized = true;
@@ -30,7 +36,8 @@ export function ensureAIEnvironment(): void {
 
     if (!hasProvider) {
       errors.push(
-        "At least one AI provider key is required: GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY"
+        "At least one AI provider key is required: GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY. " +
+        "Add them in Vercel → Project → Settings → Environment Variables."
       );
     }
   }
@@ -43,9 +50,17 @@ export function ensureAIEnvironment(): void {
     );
   }
 
-  // ── Soft warnings (dev + prod) ─────────────────────────────────────────────
+  // ── Always log provider status on boot (safe: masked values only) ──────────
 
   if (process.env.NODE_ENV === "test") return;
+
+  console.log(
+    "[CATalyst AI] Provider configuration:\n" +
+    `  GROQ_API_KEY       ${maskKey(process.env.GROQ_API_KEY)}\n` +
+    `  GEMINI_API_KEY     ${maskKey(process.env.GEMINI_API_KEY)}\n` +
+    `  OPENROUTER_API_KEY ${maskKey(process.env.OPENROUTER_API_KEY)}\n` +
+    `  Provider order:    ${process.env.AI_PROVIDER_ORDER ?? "groq,gemini,openrouter,ollama (default)"}`
+  );
 
   const warn = (msg: string) => console.warn(`[CATalyst AI] ⚠ ${msg}`);
 

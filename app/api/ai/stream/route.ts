@@ -85,9 +85,8 @@ export async function POST(req: NextRequest) {
     console.error("[AI stream] startup validation failed:", msg);
     return new Response(
       sse("error", {
-        code: "misconfigured",
-        message: "AI service is not configured. Set at least one provider API key (GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY) in your environment.",
-        detail: msg,
+        code: "AI_KEYS_MISSING",
+        message: "AI provider API keys are missing in production environment. Add GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in Vercel → Project → Settings → Environment Variables, then redeploy.",
       }),
       { status: 503, headers: SSE_HEADERS }
     );

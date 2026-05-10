@@ -112,11 +112,27 @@ export async function POST(req: NextRequest) {
     }
 
     if (err instanceof AIAllProvidersFailedError) {
+      // Detect the specific case where all providers are missing keys
+      const allMissingKeys = err.errors.length > 0 &&
+        err.errors.every((e) => e.message.includes("not configured"));
+
+      if (allMissingKeys) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: "AI_KEYS_MISSING",
+            message: "AI provider API keys are missing in production environment.",
+            action: "Add GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in Vercel → Project → Settings → Environment Variables, then redeploy.",
+          },
+          { status: 503 }
+        );
+      }
+
       return NextResponse.json(
         {
-          error:   "service_unavailable",
-          message: "AI mentor is warming up. Please try again in a moment.",
-          details: process.env.NODE_ENV !== "production" ? err.errors : undefined,
+          success: false,
+          code: "AI_PROVIDERS_UNAVAILABLE",
+          message: "AI service is temporarily unavailable. Please try again in a moment.",
         },
         { status: 503 }
       );

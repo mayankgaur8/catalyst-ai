@@ -487,13 +487,17 @@ export default function AIDoubtSolverPage() {
             const code = (parsed.code as string | undefined) ?? "";
             const rawMessage = (parsed.message as string | undefined) ?? "";
 
-            // Translate cryptic backend errors into user-friendly messages
+            // Translate backend error codes into user-friendly messages
             let displayMessage: string;
-            if (code === "misconfigured") {
-              displayMessage = "AI service is not configured. Please contact support.";
+            if (code === "AI_KEYS_MISSING") {
+              displayMessage =
+                "AI mentor is currently offline — the server is not configured with any provider keys. " +
+                "If you are the admin, add GROQ_API_KEY (or GEMINI_API_KEY / OPENROUTER_API_KEY) in " +
+                "Vercel → Project → Settings → Environment Variables, then redeploy.";
+            } else if (code === "misconfigured" || code === "AI_PROVIDERS_UNAVAILABLE") {
+              displayMessage = "AI service is temporarily unavailable. Please try again shortly.";
             } else if (code === "all_failed") {
               if (rawMessage.includes("not configured")) {
-                // Extract which provider keys are missing for admins
                 displayMessage = "AI provider API keys are not set in the server environment. " +
                   "Configure GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in Vercel settings.";
               } else if (rawMessage.includes("timed out")) {
