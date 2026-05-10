@@ -43,7 +43,7 @@ jobs:
         run: |
           test -f .next/standalone/server.js || { echo "FATAL: .next/standalone/server.js missing"; exit 1; }
           test -d .next/static               || { echo "FATAL: .next/static missing"; exit 1; }
-          echo "Standalone OK: $(find .next/standalone -maxdepth 1 -name server.js)"
+          echo "Standalone OK"
 
       - name: Prepare Azure deployment package
         run: |
@@ -92,13 +92,38 @@ jobs:
           echo "Zip size: $(du -sh deploy.zip | cut -f1)"
           echo "--- server.js entries ---"
           unzip -l deploy.zip | grep "server\.js"
-          echo "--- package.json in zip ---"
+          echo "--- package.json ---"
           unzip -p deploy.zip package.json
           unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'server\.js' \
             || { echo "FATAL: server.js NOT at zip root"; exit 1; }
           unzip -l deploy.zip | awk '{print $NF}' | grep -qx 'standalone/server\.js' \
-            || { echo "FATAL: standalone/server.js missing"; exit 1; }
+            || { echo "FATAL: standalone/server.js missing from zip"; exit 1; }
           echo "Zip structure OK"
+
+      - name: Disable Oryx via Kudu settings API
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          echo "::add-mask::$KPASS"
+          echo "::add-mask::$KUSER"
+
+          KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
+
+          echo "Calling Kudu settings API to disable Oryx..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X PUT "$KUDU/api/settings" \
+            -u "$KUSER:$KPASS" \
+            -H "Content-Type: application/json" \
+            -d '{"SCM_DO_BUILD_DURING_DEPLOYMENT":"false","ENABLE_ORYX_BUILD":"false"}')
+          echo "Kudu /api/settings HTTP $STATUS"
+
+          if [ "$STATUS" = "204" ] || [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
+            echo "Oryx disabled via Kudu settings"
+          else
+            echo "Warning: Kudu settings returned $STATUS — set SCM_DO_BUILD_DURING_DEPLOYMENT=false in Azure Portal manually"
+          fi
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
@@ -106,3 +131,32 @@ jobs:
           app-name: catalyst-ai-mayank
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: deploy.zip
+
+      - name: Verify server.js landed in Azure wwwroot
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          echo "::add-mask::$KPASS"
+          echo "::add-mask::$KUSER"
+
+          KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
+
+          echo "Waiting 20s for deployment extraction to complete..."
+          sleep 20
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "$KUSER:$KPASS" \
+            "$KUDU/api/vfs/site/wwwroot/server.js")
+          echo "wwwroot/server.js VFS check: HTTP $STATUS"
+
+          if [ "$STATUS" = "200" ]; then
+            echo "SUCCESS: /home/site/wwwroot/server.js confirmed present"
+          else
+            echo "FAIL: server.js not found (HTTP $STATUS)"
+            echo "--- wwwroot listing ---"
+            curl -s -u "$KUSER:$KPASS" "$KUDU/api/vfs/site/wwwroot/" | \
+              node -e "var d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ try { JSON.parse(d).forEach(f=>console.log(f.name,f.mime)); } catch(e) { console.log(d); } })"
+            exit 1
+          fi
