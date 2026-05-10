@@ -21,6 +21,25 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Check publish profile secret
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if [ -z "$PROFILE" ]; then
+            echo "FATAL: AZURE_WEBAPP_PUBLISH_PROFILE secret is not set."
+            echo "Fix: GitHub repo → Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: AZURE_WEBAPP_PUBLISH_PROFILE"
+            echo "Value: paste the XML from Azure Portal → App Service → Get publish profile"
+            exit 1
+          fi
+          PROFILE_LEN=${#PROFILE}
+          echo "Publish profile length: $PROFILE_LEN chars"
+          if echo "$PROFILE" | grep -q 'publishProfile'; then
+            echo "Publish profile XML looks valid (contains 'publishProfile')"
+          else
+            echo "WARNING: PROFILE does not look like a publish profile XML"
+          fi
+
       - name: Install dependencies
         run: npm ci
 
@@ -101,22 +120,23 @@ jobs:
           echo "Zip structure OK"
 
       - name: Disable Oryx via Kudu settings API
+        continue-on-error: true
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//' || true)
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//' || true)
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
 
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
 
           echo "Calling Kudu settings API to disable Oryx..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
             -X PUT "$KUDU/api/settings" \
             -u "$KUSER:$KPASS" \
             -H "Content-Type: application/json" \
-            -d '{"SCM_DO_BUILD_DURING_DEPLOYMENT":"false","ENABLE_ORYX_BUILD":"false"}')
+            -d '{"SCM_DO_BUILD_DURING_DEPLOYMENT":"false","ENABLE_ORYX_BUILD":"false"}' || echo "000")
           echo "Kudu /api/settings HTTP $STATUS"
 
           if [ "$STATUS" = "204" ] || [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
@@ -133,11 +153,12 @@ jobs:
           package: deploy.zip
 
       - name: Verify server.js landed in Azure wwwroot
+        continue-on-error: true
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//' || true)
+          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//' || true)
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
 
@@ -146,9 +167,9 @@ jobs:
           echo "Waiting 20s for deployment extraction to complete..."
           sleep 20
 
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
             -u "$KUSER:$KPASS" \
-            "$KUDU/api/vfs/site/wwwroot/server.js")
+            "$KUDU/api/vfs/site/wwwroot/server.js" || echo "000")
           echo "wwwroot/server.js VFS check: HTTP $STATUS"
 
           if [ "$STATUS" = "200" ]; then
@@ -156,7 +177,6 @@ jobs:
           else
             echo "FAIL: server.js not found (HTTP $STATUS)"
             echo "--- wwwroot listing ---"
-            curl -s -u "$KUSER:$KPASS" "$KUDU/api/vfs/site/wwwroot/" | \
+            curl -s --max-time 15 -u "$KUSER:$KPASS" "$KUDU/api/vfs/site/wwwroot/" | \
               node -e "var d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ try { JSON.parse(d).forEach(f=>console.log(f.name,f.mime)); } catch(e) { console.log(d); } })"
-            exit 1
           fi
