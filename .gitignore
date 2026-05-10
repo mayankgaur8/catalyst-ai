@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Azure deploy artifacts — built in CI, never committed
+/deploy/
+/deploy.zip

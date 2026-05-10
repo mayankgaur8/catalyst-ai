@@ -145,8 +145,9 @@ jobs:
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          ONELINE=$(echo "$PROFILE" | tr -s '[:space:]' ' ')
+          KUSER=$(echo "$ONELINE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$ONELINE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
@@ -174,8 +175,9 @@ jobs:
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          ONELINE=$(echo "$PROFILE" | tr -s '[:space:]' ' ')
+          KUSER=$(echo "$ONELINE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$ONELINE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"
@@ -206,8 +208,9 @@ jobs:
         env:
           PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          KUSER=$(echo "$PROFILE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
-          KPASS=$(echo "$PROFILE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
+          ONELINE=$(echo "$PROFILE" | tr -s '[:space:]' ' ')
+          KUSER=$(echo "$ONELINE" | grep -oE 'userName="[^"]+"' | head -1 | sed 's/userName="//;s/"//')
+          KPASS=$(echo "$ONELINE" | grep -oE 'userPWD="[^"]+"'  | head -1 | sed 's/userPWD="//;s/"//')
           echo "::add-mask::$KPASS"
           echo "::add-mask::$KUSER"
           KUDU="https://catalyst-ai-mayank.scm.azurewebsites.net"

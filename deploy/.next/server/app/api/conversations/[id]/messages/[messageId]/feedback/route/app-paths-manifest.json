@@ -1,3 +1,0 @@
-{
-  "/api/conversations/[id]/messages/[messageId]/feedback/route": "app/api/conversations/[id]/messages/[messageId]/feedback/route.js"
-}
