@@ -42,9 +42,10 @@ jobs:
       - name: Verify Next standalone output
         run: |
           echo "Checking standalone output..."
-          test -f .next/standalone/server.js
-          test -d .next/static
+          test -f .next/standalone/server.js || { echo "FATAL: .next/standalone/server.js missing"; exit 1; }
+          test -d .next/static             || { echo "FATAL: .next/static missing"; exit 1; }
           find .next/standalone -maxdepth 3 -name "server.js" -print
+          echo "Standalone output OK"
 
       - name: Prepare Azure deployment package
         run: |
@@ -68,20 +69,29 @@ jobs:
           mkdir -p deploy/standalone
           printf 'require("../server.js")\n' > deploy/standalone/server.js
 
-          echo "Deploy package preview:"
-          find deploy -maxdepth 4 -type f | sort | head -120
+          echo "Deploy package preview (top 60 files):"
+          find deploy -maxdepth 4 -type f | sort | head -60
 
       - name: Verify Azure deployment package
         run: |
-          echo "Verifying deployment files..."
-          test -f deploy/server.js
-          test -f deploy/standalone/server.js
-          test -d deploy/.next/static
-          echo "Deployment package verified successfully"
+          echo "Verifying required files..."
+          test -f deploy/server.js           || { echo "FATAL: deploy/server.js missing"; exit 1; }
+          test -f deploy/standalone/server.js || { echo "FATAL: deploy/standalone/server.js missing"; exit 1; }
+          test -d deploy/.next/static        || { echo "FATAL: deploy/.next/static missing"; exit 1; }
+          echo "All required files present"
+
+      - name: Zip deployment package
+        run: |
+          cd deploy
+          zip -r -y ../deploy.zip .
+          cd ..
+          echo "Zip size: $(du -sh deploy.zip | cut -f1)"
+          echo "Zip top-level entries:"
+          unzip -l deploy.zip | grep -v '/$' | awk 'NR>3 && $NF !~ /^\s*$/' | head -30
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: catalyst-ai-mayank
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./deploy
+          package: deploy.zip

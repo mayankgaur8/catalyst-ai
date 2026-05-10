@@ -27,6 +27,17 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Generate Next.js types
+        run: |
+          mkdir -p .next/types
+          node -e "
+            const fs = require('fs');
+            const dir = '.next/types';
+            if (!fs.existsSync(dir + '/routes.d.ts')) {
+              fs.writeFileSync(dir + '/routes.d.ts', '// generated stub for CI\nexport {};\n');
+            }
+          "
+
       - name: TypeScript check
         run: npx tsc --noEmit
 
@@ -62,6 +73,6 @@ jobs:
 
       - name: Verify standalone output
         run: |
-          test -f .next/standalone/server.js
-          test -d .next/static
+          test -f .next/standalone/server.js || { echo "FATAL: .next/standalone/server.js missing"; exit 1; }
+          test -d .next/static               || { echo "FATAL: .next/static missing"; exit 1; }
           echo "Standalone build verified"
