@@ -27,66 +27,55 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (standalone)
+      - name: Build Next.js app
         run: npm run build
         env:
           NEXT_PUBLIC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
 
-      # ── Verify standalone output exists ─────────────────────────────────────
-      - name: Verify standalone output
+      - name: Verify standalone build exists
         run: |
-          echo "=== Checking standalone output ==="
-          test -f .next/standalone/server.js || { echo "ERROR: .next/standalone/server.js not found"; exit 1; }
-          test -d .next/static              || { echo "ERROR: .next/static not found"; exit 1; }
-          echo "✓ Standalone output verified"
+          test -f .next/standalone/server.js
+          test -d .next/static
 
-      # ── Package deployment artifact ──────────────────────────────────────────
-      - name: Package deployment artifact
+      - name: Prepare deployment package
         run: |
           rm -rf deploy
           mkdir -p deploy
 
-          # Copy standalone server + node_modules (Next.js bundles these)
+          # Copy standalone server
           cp -R .next/standalone/. deploy/
 
-          # Copy static assets into expected location inside deploy/.next/static
+          # Copy static assets
           mkdir -p deploy/.next/static
           cp -R .next/static/. deploy/.next/static/
 
-          # Copy public folder (images, fonts, robots.txt, etc.)
+          # Copy public folder
           if [ -d public ]; then
+            mkdir -p deploy/public
             cp -R public/. deploy/public/
           fi
 
-      # ── Verify packaged artifact ─────────────────────────────────────────────
-      - name: Verify packaged artifact
-        run: |
-          echo "=== Verifying deploy/ structure ==="
-          test -f deploy/server.js          || { echo "ERROR: deploy/server.js missing"; exit 1; }
-          test -d deploy/.next/static       || { echo "ERROR: deploy/.next/static missing"; exit 1; }
-          echo "✓ deploy/server.js confirmed"
-          echo "✓ deploy/.next/static confirmed"
-          echo ""
-          echo "=== Top-level files in deploy/ ==="
-          find deploy -maxdepth 3 -type f | sort | head -60
-
-      # ── Add Azure compatibility wrapper ──────────────────────────────────────
-      # If Azure startup command is still set to "node standalone/server.js",
-      # this wrapper will redirect to the actual server.js at the root.
-      - name: Add startup command compatibility wrapper
-        run: |
-          echo "Creating deploy/standalone/server.js compatibility wrapper..."
+          # Compatibility fallback
           mkdir -p deploy/standalone
-          cat > deploy/standalone/server.js <<'COMPAT_EOF'
-          // Azure compatibility wrapper
-          // Allows: node standalone/server.js (old Azure setting)
-          // Maps to: ../server.js (actual Next.js server at root)
-          require("../server.js");
-          COMPAT_EOF
-          test -f deploy/standalone/server.js && echo "✓ Compatibility wrapper created"
+          cat > deploy/standalone/server.js <<'EOF'
+          require("../server.js")
+          EOF
+
+          echo "DEPLOY CONTENTS:"
+          find deploy -maxdepth 3 -type f | sort
+
+          echo "VERIFY ROOT SERVER:"
+          test -f deploy/server.js
+
+      - name: Fail if deploy/server.js missing
+        run: |
+          if [ ! -f deploy/server.js ]; then
+            echo "ERROR: deploy/server.js missing"
+            exit 1
+          fi
 
       # ── Deploy to Azure App Service ──────────────────────────────────────────
-      - name: Deploy to Azure App Service
+      - name: Deploy to Azure
         uses: azure/webapps-deploy@v3
         with:
           app-name: catalyst-ai-mayank
