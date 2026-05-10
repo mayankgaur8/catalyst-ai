@@ -27,17 +27,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Generate Next.js types
-        run: |
-          mkdir -p .next/types
-          node -e "
-            const fs = require('fs');
-            const dir = '.next/types';
-            if (!fs.existsSync(dir + '/routes.d.ts')) {
-              fs.writeFileSync(dir + '/routes.d.ts', '// generated stub for CI\nexport {};\n');
-            }
-          "
-
       - name: TypeScript check
         run: npx tsc --noEmit
 
