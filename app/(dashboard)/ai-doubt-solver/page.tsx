@@ -484,8 +484,35 @@ export default function AIDoubtSolverPage() {
             setStatusMsg(null);
           } else if (event === "error") {
             clearStreamTimeout();
+            const code = (parsed.code as string | undefined) ?? "";
+            const rawMessage = (parsed.message as string | undefined) ?? "";
+
+            // Translate cryptic backend errors into user-friendly messages
+            let displayMessage: string;
+            if (code === "misconfigured") {
+              displayMessage = "AI service is not configured. Please contact support.";
+            } else if (code === "all_failed") {
+              if (rawMessage.includes("not configured")) {
+                // Extract which provider keys are missing for admins
+                displayMessage = "AI provider API keys are not set in the server environment. " +
+                  "Configure GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in Vercel settings.";
+              } else if (rawMessage.includes("timed out")) {
+                displayMessage = "AI response timed out. Please try again.";
+              } else if (rawMessage.includes("quota") || rawMessage.includes("429")) {
+                displayMessage = "AI provider quota exceeded. Please try again in a few minutes.";
+              } else {
+                displayMessage = "All AI providers are temporarily unavailable. Please try again.";
+              }
+            } else if (code === "rate_limited") {
+              displayMessage = "Too many requests. Please wait a moment and try again.";
+            } else if (code === "quota_exceeded") {
+              displayMessage = (parsed.uiMessage as string | undefined) ?? "Daily AI limit reached. Upgrade to Pro for more requests.";
+            } else {
+              displayMessage = rawMessage || "AI mentor is warming up. Please try again.";
+            }
+
             updateMessage(convId, aiMsgId, {
-              content:   (parsed.message as string | undefined) ?? "AI mentor is warming up. Please try again.",
+              content:   displayMessage,
               streaming: false,
               error:     true,
             });

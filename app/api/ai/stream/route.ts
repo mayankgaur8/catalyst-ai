@@ -8,8 +8,13 @@ import { streamGroq } from "@/lib/ai/providers/groq";
 import { routeAI } from "@/lib/ai/aiRouter";
 import { buildMessages, type HistoryMessage, type UserProfileContext } from "@/lib/ai/prompts";
 import type { AIFeature } from "@/lib/ai/types";
-import { AIRateLimitError, AIQuotaExceededError } from "@/lib/ai/types";
+import { AIRateLimitError, AIQuotaExceededError, AIAllProvidersFailedError } from "@/lib/ai/types";
 import { decrementActiveStreams, incrementActiveStreams, recordResponseLatency, recordStreamDisconnect } from "@/lib/runtime/ops";
+import { ensureAIEnvironment } from "@/lib/ai/startup";
+
+// ── Vercel runtime — must be Node.js for streaming SSE ────────────────────────
+export const runtime = "nodejs";
+export const maxDuration = 60; // seconds (requires Vercel Pro or higher)
 
 const VALID_FEATURES = new Set<AIFeature>([
   "doubt_solver",
@@ -72,6 +77,22 @@ function parseUserProfile(raw: unknown): UserProfileContext | undefined {
 }
 
 export async function POST(req: NextRequest) {
+  // Validate environment up-front; throws a 500 in production if keys are missing
+  try {
+    ensureAIEnvironment();
+  } catch (startupErr) {
+    const msg = startupErr instanceof Error ? startupErr.message : "AI service misconfigured";
+    console.error("[AI stream] startup validation failed:", msg);
+    return new Response(
+      sse("error", {
+        code: "misconfigured",
+        message: "AI service is not configured. Set at least one provider API key (GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY) in your environment.",
+        detail: msg,
+      }),
+      { status: 503, headers: SSE_HEADERS }
+    );
+  }
+
   const { userId, plan, isAdmin } = extractSecureUser(req);
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
@@ -175,7 +196,9 @@ export async function POST(req: NextRequest) {
         }
 
         controller.enqueue(sseBytes("done", { provider: "groq", cached: false }));
-      } catch {
+      } catch (groqErr) {
+        const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+        console.error("[AI stream] Groq failed, trying fallback providers:", groqMsg);
         controller.enqueue(sseBytes("status", { message: "Trying backup AI model…" }));
 
         try {
@@ -190,8 +213,21 @@ export async function POST(req: NextRequest) {
           controller.enqueue(sseBytes("chunk", { text: result.text }));
           controller.enqueue(sseBytes("done", { provider: result.provider, cached: result.cached }));
         } catch (fallbackErr) {
-          const message = fallbackErr instanceof Error ? fallbackErr.message : "AI mentor is warming up.";
-          controller.enqueue(sseBytes("error", { code: "all_failed", message }));
+          const isAllFailed = fallbackErr instanceof AIAllProvidersFailedError;
+          const message = isAllFailed
+            ? fallbackErr.message  // now includes per-provider reasons e.g. "groq: GROQ_API_KEY not configured; gemini: ..."
+            : fallbackErr instanceof Error
+              ? fallbackErr.message
+              : "AI mentor is warming up.";
+          const providerErrors = isAllFailed ? fallbackErr.errors : undefined;
+
+          console.error("[AI stream] All providers failed:", message);
+          controller.enqueue(sseBytes("error", {
+            code: "all_failed",
+            message,
+            // Surface per-provider errors for admin diagnostics
+            providerErrors,
+          }));
         }
       } finally {
         controller.close();

@@ -157,7 +157,11 @@ export class AIAllProvidersFailedError extends Error {
   readonly errors: Array<{ provider: AIProvider; message: string }>;
 
   constructor(errors: Array<{ provider: AIProvider; message: string }>) {
-    super("All AI providers failed");
+    // Build a human-readable summary that surfaces the real per-provider cause
+    const summary = errors
+      .map(({ provider, message }) => `${provider}: ${message}`)
+      .join("; ");
+    super(errors.length > 0 ? `All AI providers failed — ${summary}` : "All AI providers failed");
     this.name = "AIAllProvidersFailedError";
     this.errors = errors;
   }

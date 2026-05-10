@@ -3,7 +3,7 @@ import { AIProviderError } from "../types";
 import { buildMessages } from "../prompts";
 
 const PROVIDER = "groq" as const;
-const TIMEOUT  = 15_000;
+const TIMEOUT  = 20_000; // 20 s — allows for Vercel cold-start overhead
 const API_URL  = "https://api.groq.com/openai/v1/chat/completions";
 
 type ChatMsg = { role: "system" | "user" | "assistant"; content: string };

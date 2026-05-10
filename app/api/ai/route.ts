@@ -16,6 +16,10 @@ import {
   AIRateLimitError,
 } from "@/lib/ai/types";
 
+// ── Vercel runtime — Node.js required for AI provider SDK calls ────────────────
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const VALID_FEATURES = new Set<AIFeature>([
