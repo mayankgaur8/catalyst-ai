@@ -2,16 +2,13 @@ name: Deploy to Azure App Service
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
-
-concurrency:
-  group: azure-deploy-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Build & Deploy to Azure
+    name: Build and Deploy to Azure
     runs-on: ubuntu-latest
 
     steps:
@@ -41,12 +38,10 @@ jobs:
 
       - name: Build Next app
         run: npm run build
-        env:
-          NEXT_PUBLIC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
 
       - name: Verify Next standalone output
         run: |
-          echo "Checking .next standalone output..."
+          echo "Checking standalone output..."
           test -f .next/standalone/server.js
           test -d .next/static
           find .next/standalone -maxdepth 3 -name "server.js" -print
@@ -78,7 +73,7 @@ jobs:
 
       - name: Verify Azure deployment package
         run: |
-          echo "Verifying required deployment files..."
+          echo "Verifying deployment files..."
           test -f deploy/server.js
           test -f deploy/standalone/server.js
           test -d deploy/.next/static
