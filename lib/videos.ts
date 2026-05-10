@@ -49,6 +49,20 @@ export function ytThumbnail(youtubeId: string, quality: "hqdefault" | "maxresdef
 
 export const PLAN_ACCESS_ORDER: VideoAccess[] = ["free", "pro", "elite"];
 
+/**
+ * Resolve active video list from defaults + optional admin overrides.
+ * By default soft-deleted videos are excluded.
+ */
+export function resolveVideos(
+  defaultVideos: VideoLesson[],
+  adminVideos: VideoLesson[] | null,
+  options?: { includeDeleted?: boolean }
+): VideoLesson[] {
+  const source = adminVideos ?? defaultVideos;
+  if (options?.includeDeleted) return source;
+  return source.filter((v) => v.deletedAt === null);
+}
+
 /** Returns true if userPlan can access a video with requiredAccess */
 export function canAccessVideo(userPlan: string | null | undefined, requiredAccess: VideoAccess, isAdmin = false): boolean {
   if (isAdmin) return true;
@@ -238,27 +252,103 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v4",
-    youtubeId: null,
+    youtubeId: "TEeeEplbvQ4",
     title: "DILR: Seating Arrangement Deep Dive",
     instructor: "Vikram Sharma",
-    description: "Master all variants of seating arrangement questions — linear, circular, floor-based — with systematic approaches.",
+    description:
+      "Master CAT DILR Seating Arrangement sets with a complete deep-dive into linear arrangements, circular arrangements, double-row seating, directional logic, conditional clues, contradiction handling, and topper-level diagram techniques. Learn how to identify anchor clues, reduce possibilities, avoid common traps, and solve complex seating arrangement puzzles faster with high accuracy.",
     duration: "1:12:08",
     views: "29K",
     rating: 4.7,
     category: "DILR",
     access: "pro",
-    tags: ["DILR", "Seating Arrangement", "Logic", "CAT"],
+    tags: [
+      "CAT DILR",
+      "Seating Arrangement",
+      "Logical Reasoning",
+      "Circular Arrangement",
+      "Linear Arrangement",
+      "Puzzle Solving",
+      "CAT 2024",
+      "MBA Preparation",
+      "DILR Masterclass",
+      "99 Percentile",
+    ],
     featured: false,
     order: 3,
     status: "published",
     deletedAt: null,
-    aiSummary: "Systematic methods for solving all seating arrangement variants. Includes grid-based tabulation, constraint propagation, and case elimination.",
+    xpToastMessage: "🧠 DILR puzzle mastery unlocked! Your logical reasoning power is evolving.",
+    aiSummary:
+      "This lesson teaches a structured, high-accuracy approach to CAT DILR seating arrangement problems. Students learn how to decode clues, build clean diagrams, eliminate wrong possibilities, and solve complex arrangement sets under exam pressure.",
     keyTakeaways: [
-      "Always draw a rough table/grid before solving",
-      "Start with the most constrained entity (fewest options)",
-      "Circular arrangements: fix one element and arrange the rest",
-      "Floor arrangements: treat each floor as a row in your grid",
-      "Re-read constraints after placing each entity to catch contradictions early",
+      "Linear seating arrangement strategy",
+      "Circular seating shortcut methods",
+      "Double-row facing arrangement logic",
+      "Anchor clue identification",
+      "Possibility reduction framework",
+      "Contradiction-based elimination",
+      "Time management for DILR sets",
+      "CAT-level puzzle solving approach",
+      "Diagram-based reasoning",
+      "Accuracy improvement techniques",
+    ],
+    quiz: [
+      {
+        id: "v4q1",
+        question: "In a linear arrangement with 8 people, if A is third from the left and B is immediately right of A, B's position is:",
+        options: ["Second from left", "Fourth from left", "Third from right", "Fifth from left"],
+        correctIndex: 1,
+        explanation: "If A is third from the left, the immediately right seat is fourth from the left.",
+      },
+      {
+        id: "v4q2",
+        question: "In circular seating problems, why is one person's position often fixed first?",
+        options: [
+          "To reduce rotationally equivalent duplicate cases",
+          "Because CAT requires alphabetical order",
+          "To avoid drawing a circle",
+          "It is only needed for even-number groups",
+        ],
+        correctIndex: 0,
+        explanation: "Circular arrangements are equivalent under rotation; fixing one person removes redundant duplicate arrangements.",
+      },
+      {
+        id: "v4q3",
+        question: "In double-row seating where one row faces north and the other south, what is the key first step?",
+        options: [
+          "Assume everyone faces north",
+          "Mark row orientation and opposite-facing direction before placing clues",
+          "Start by placing the shortest names first",
+          "Ignore facing direction until the end",
+        ],
+        correctIndex: 1,
+        explanation: "Double-row logic depends on facing direction; row orientation must be fixed first to interpret left/right correctly.",
+      },
+      {
+        id: "v4q4",
+        question: "What best describes an anchor clue in seating arrangement sets?",
+        options: [
+          "A clue with no positional value",
+          "A clue that fixes an absolute/near-absolute position and helps chain other clues",
+          "A clue that only applies in circular puzzles",
+          "A clue used only for elimination at the end",
+        ],
+        correctIndex: 1,
+        explanation: "Anchor clues lock a position or relationship early, creating a base to attach other conditional clues quickly.",
+      },
+      {
+        id: "v4q5",
+        question: "If a placement creates contradiction with one clue in a multi-clue puzzle, the best action is:",
+        options: [
+          "Keep it and adjust all other clues",
+          "Discard that case branch immediately and backtrack",
+          "Ignore the conflicting clue",
+          "Restart the full set from scratch",
+        ],
+        correctIndex: 1,
+        explanation: "Contradiction-based elimination is core to DILR speed: prune impossible branches immediately and proceed with viable cases.",
+      },
     ],
   },
   {

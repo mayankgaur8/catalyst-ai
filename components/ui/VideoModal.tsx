@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState, useReducer } from "react";
+import { useEffect, useRef, useCallback, useState, useReducer, useMemo } from "react";
 import {
   X, AlertCircle, Bookmark, BookmarkCheck, CheckCircle2,
   ExternalLink, FileText, Lightbulb, ChevronDown, ChevronUp,
   RotateCcw, ThumbsUp, Zap, Trophy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { VideoLesson, VideoQuizQuestion } from "@/lib/videos";
+import { VideoLesson, VideoQuizQuestion, DEFAULT_VIDEOS, resolveVideos } from "@/lib/videos";
 import { useVideoStore } from "@/store/useVideoStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "@/lib/toast";
@@ -754,9 +754,14 @@ interface RelatedProps {
 }
 
 function RelatedSidebar({ currentId, category, onNavigate, onClose }: RelatedProps) {
-  const videos = useVideoStore((s) => s.getVideos())
-    .filter((v) => v.category === category && v.id !== currentId && v.status === "published")
-    .slice(0, 4);
+  const adminOverrides = useVideoStore((s) => s.adminOverrides);
+
+  const videos = useMemo(() => {
+    const visibleVideos = resolveVideos(DEFAULT_VIDEOS, adminOverrides);
+    return visibleVideos
+      .filter((v) => v.category === category && v.id !== currentId && v.status === "published")
+      .slice(0, 4);
+  }, [adminOverrides, category, currentId]);
 
   if (videos.length === 0) return null;
 

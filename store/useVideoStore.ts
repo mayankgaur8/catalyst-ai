@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { VideoLesson, DEFAULT_VIDEOS } from "@/lib/videos";
+import { VideoLesson, DEFAULT_VIDEOS, resolveVideos } from "@/lib/videos";
 
 export interface WatchRecord {
   videoId: string;
@@ -192,13 +192,12 @@ export const useVideoStore = create<VideoState & VideoActions>()(
 
       /** Returns all non-soft-deleted videos (published + draft). */
       getVideos() {
-        const all = get().adminOverrides ?? DEFAULT_VIDEOS;
-        return all.filter((v) => v.deletedAt === null);
+        return resolveVideos(DEFAULT_VIDEOS, get().adminOverrides);
       },
 
       /** Admin-only — includes soft-deleted videos. */
       getAdminVideos() {
-        return get().adminOverrides ?? DEFAULT_VIDEOS;
+        return resolveVideos(DEFAULT_VIDEOS, get().adminOverrides, { includeDeleted: true });
       },
 
       addVideo(v) {
