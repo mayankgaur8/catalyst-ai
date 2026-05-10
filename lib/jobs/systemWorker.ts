@@ -7,6 +7,15 @@ import { createEmbedding, summarizeText } from "@/lib/memory/embeddings";
 import { prisma } from "@/lib/prisma";
 import { sendStreakReminderEmail, sendComebackEmail, sendWeeklyReportEmail } from "@/lib/email/service";
 
+// Local type for JSON values to avoid Prisma namespace import
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 let workerRedis: import("ioredis").Redis | null = null;
 function getWorkerRedis() {
   if (workerRedis) return workerRedis;
@@ -32,7 +41,7 @@ async function handleSummarizeMemory(data: SystemJobPayload) {
 
   await prisma.memory.update({
     where: { id: memoryId },
-    data: { embedding: embedding as unknown as import("@prisma/client").Prisma.InputJsonValue },
+    data: { embedding: embedding as any },
   });
 
   return { ok: true, memoryId, summarized: summary };
@@ -54,7 +63,7 @@ async function handleGenerateEmbeddings(data: SystemJobPayload) {
     const embedding = createEmbedding(msg.content.slice(0, 500));
     await prisma.message.update({
       where: { id: msg.id },
-      data: { embedding: embedding as unknown as import("@prisma/client").Prisma.InputJsonValue },
+      data: { embedding: embedding as any },
     });
     processed++;
   }

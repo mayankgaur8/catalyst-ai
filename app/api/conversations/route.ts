@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
+
+type ConversationWhereInput = {
+  userId: string;
+  deletedAt: null;
+  isPinned?: boolean;
+};
 
 // GET /api/conversations - List user conversations with pagination
 export async function GET(req: NextRequest) {
@@ -17,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ConversationWhereInput = {
+    const where: ConversationWhereInput = {
       userId,
       deletedAt: null,
     };

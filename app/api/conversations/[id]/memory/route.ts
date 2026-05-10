@@ -3,6 +3,20 @@ import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 import { rememberMemory } from "@/lib/memory/service";
 
+type Message = {
+  id: string;
+  conversationId: string;
+  role: string;
+  content: string;
+  embedding?: unknown;
+  metadata?: unknown;
+  feedback?: string | null;
+  flagReason?: string | null;
+  regeneratedFrom?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,7 +36,7 @@ export async function POST(
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  const fallbackText = conversation.messages.map((message) => message.content).join(" \n");
+  const fallbackText = conversation.messages.map((message: Message) => message.content).join(" \n");
   const memory = await rememberMemory({
     userId: user.id,
     conversationId,
