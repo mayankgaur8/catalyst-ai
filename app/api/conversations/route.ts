@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getUserIdFromHeader } from "@/lib/auth-utils";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
 // GET /api/conversations - List user conversations with pagination
 export async function GET(req: NextRequest) {
   try {
-    const userId = getUserIdFromHeader(req);
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { id: userId } = user;
 
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
@@ -15,7 +17,7 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.ConversationWhereInput = {
       userId,
       deletedAt: null,
     };
@@ -60,8 +62,9 @@ export async function GET(req: NextRequest) {
 // POST /api/conversations - Create new conversation
 export async function POST(req: NextRequest) {
   try {
-    const userId = getUserIdFromHeader(req);
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { id: userId } = user;
 
     const { title = "New Conversation", topic = "general" } = await req.json();
 

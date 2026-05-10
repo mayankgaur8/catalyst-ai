@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { completeVideo, getVideoById, userCanAccess } from "@/lib/videoServerStore";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
 const XP_REWARD = 50;
 
@@ -9,19 +10,18 @@ export async function POST(
 ) {
   const { id: videoId } = await params;
 
-  const userId = req.headers.get("x-user-id");
-  if (!userId) {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const { id: userId, plan: userPlan, role: userRole } = user;
 
   const video = getVideoById(videoId);
   if (!video || video.deletedAt) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
 
-  const userPlan = req.headers.get("x-user-plan");
-  const userRole = req.headers.get("x-user-role");
-  if (userRole !== "admin" && !userCanAccess(userPlan, video.access)) {
+  if (userRole !== "ADMIN" && !userCanAccess(userPlan, video.access)) {
     return NextResponse.json({ error: "Forbidden: insufficient plan" }, { status: 403 });
   }
 
@@ -33,7 +33,7 @@ export async function POST(
   const durationSecs = parseDuration(video.duration);
   const minRequired = durationSecs * 0.65; // allow small margin below 70%
 
-  if (watchedSeconds < minRequired && userRole !== "admin") {
+  if (watchedSeconds < minRequired && userRole !== "ADMIN") {
     return NextResponse.json(
       { error: "Insufficient watch time for XP award", required: minRequired, actual: watchedSeconds },
       { status: 422 }

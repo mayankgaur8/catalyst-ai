@@ -1,29 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVideos, createVideo } from "@/lib/videoServerStore";
 import { VideoLesson } from "@/lib/videos";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
-function requireAdmin(req: NextRequest): NextResponse | null {
-  const role = req.headers.get("x-user-role");
-  const adminId = req.headers.get("x-user-id");
-  if (role !== "admin" || !adminId) {
+async function requireAdmin(req: NextRequest): Promise<{ adminId: string } | NextResponse> {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
-  return null;
+  return { adminId: user.id };
 }
 
 export async function GET(req: NextRequest) {
-  const err = requireAdmin(req);
-  if (err) return err;
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return auth;
 
   const includeDeleted = new URL(req.url).searchParams.get("includeDeleted") === "true";
   return NextResponse.json({ videos: getVideos(includeDeleted) });
 }
 
 export async function POST(req: NextRequest) {
-  const err = requireAdmin(req);
-  if (err) return err;
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return auth;
 
-  const adminId = req.headers.get("x-user-id")!;
   const body = await req.json().catch(() => null);
   if (!body?.title) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -51,6 +50,6 @@ export async function POST(req: NextRequest) {
     xpToastMessage: body.xpToastMessage,
   };
 
-  const created = createVideo(video, adminId);
+  const created = createVideo(video, auth.adminId);
   return NextResponse.json({ video: created }, { status: 201 });
 }

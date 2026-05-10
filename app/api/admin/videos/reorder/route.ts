@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reorderVideos } from "@/lib/videoServerStore";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
 export async function POST(req: NextRequest) {
-  const role = req.headers.get("x-user-role");
-  const adminId = req.headers.get("x-user-id");
-  if (role !== "admin" || !adminId) {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
@@ -14,6 +14,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "orderedIds array is required" }, { status: 400 });
   }
 
-  reorderVideos(orderedIds, adminId);
+  reorderVideos(orderedIds, user.id);
   return NextResponse.json({ success: true });
 }

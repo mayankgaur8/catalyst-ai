@@ -49,7 +49,7 @@ interface ConversationActions {
   setActive: (id: string) => void;
   addMessage: (convId: string, msg: Omit<ChatMessage, "id" | "createdAt" | "updatedAt">) => string;
   updateMessage: (convId: string, msgId: string, patch: Partial<ChatMessage>) => void;
-  addMessageFeedback: (convId: string, msgId: string, feedback: string, flagReason?: string) => void;
+  addMessageFeedback: (convId: string, msgId: string, feedback: ChatMessage["feedback"], flagReason?: string) => void;
   clearMessages: (convId: string) => void;
   getActive: () => Conversation | null;
   getUserConversations: (userId: string) => Conversation[];
@@ -174,7 +174,7 @@ export const useConversationStore = create<ConversationStore>()(
               ...c,
               messages: c.messages.map((m) =>
                 m.id === msgId
-                  ? { ...m, feedback: feedback as any, ...(flagReason && { flagReason }) }
+                  ? { ...m, feedback, ...(flagReason && { flagReason }) }
                   : m
               ),
             }
@@ -255,7 +255,7 @@ export const useConversationStore = create<ConversationStore>()(
           set((s) => ({
             conversations: [
               ...s.conversations.filter((c) => !c.syncedWithBackend), // Keep local unsync'd
-              ...backendConvs.map((bc: any) => ({
+              ...backendConvs.map((bc: { id: string; userId: string; title: string; topic?: string; isPinned: boolean; isFavorite: boolean; deletedAt?: string | null; createdAt: string; updatedAt: string }) => ({
                 ...bc,
                 messages: [], // Load messages separately
                 syncedWithBackend: true,

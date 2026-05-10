@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserIdFromHeader } from "@/lib/auth-utils";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
 // PUT /api/conversations/[id]/messages/[messageId]/feedback - Add feedback to message
 export async function PUT(
@@ -8,8 +8,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; messageId: string }> }
 ) {
   try {
-    const userId = getUserIdFromHeader(req);
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { id: userId } = user;
 
     const { id: conversationId, messageId } = await params;
     const { feedback, flagReason } = await req.json();

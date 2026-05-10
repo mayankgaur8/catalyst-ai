@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateVideo, deleteVideo, restoreVideo, getVideoById } from "@/lib/videoServerStore";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
-function requireAdmin(req: NextRequest): { adminId: string } | NextResponse {
-  const role = req.headers.get("x-user-role");
-  const adminId = req.headers.get("x-user-id");
-  if (role !== "admin" || !adminId) {
+async function requireAdmin(req: NextRequest): Promise<{ adminId: string } | NextResponse> {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
-  return { adminId };
+  return { adminId: user.id };
 }
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireAdmin(req);
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
@@ -28,7 +28,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireAdmin(req);
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
@@ -42,7 +42,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // POST to /api/admin/videos/:id is used for restore
-  const auth = requireAdmin(req);
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
@@ -61,7 +61,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireAdmin(req);
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;

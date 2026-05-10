@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuditLog, getAnalytics } from "@/lib/videoServerStore";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-utils";
 
 export async function GET(req: NextRequest) {
-  const role = req.headers.get("x-user-role");
-  if (role !== "admin") {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
