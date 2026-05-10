@@ -70,6 +70,21 @@ jobs:
           echo "=== Top-level files in deploy/ ==="
           find deploy -maxdepth 3 -type f | sort | head -60
 
+      # ── Add Azure compatibility wrapper ──────────────────────────────────────
+      # If Azure startup command is still set to "node standalone/server.js",
+      # this wrapper will redirect to the actual server.js at the root.
+      - name: Add startup command compatibility wrapper
+        run: |
+          echo "Creating deploy/standalone/server.js compatibility wrapper..."
+          mkdir -p deploy/standalone
+          cat > deploy/standalone/server.js <<'COMPAT_EOF'
+          // Azure compatibility wrapper
+          // Allows: node standalone/server.js (old Azure setting)
+          // Maps to: ../server.js (actual Next.js server at root)
+          require("../server.js");
+          COMPAT_EOF
+          test -f deploy/standalone/server.js && echo "✓ Compatibility wrapper created"
+
       # ── Deploy to Azure App Service ──────────────────────────────────────────
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
