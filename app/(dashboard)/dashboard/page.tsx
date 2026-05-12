@@ -19,6 +19,7 @@ import { getRandomQuote, cn } from "@/lib/utils";
 import { TOPICS } from "@/lib/data";
 import Link from "next/link";
 import { UpgradeBanner } from "@/components/ui/UpgradeBanner";
+import { VoiceTutorModal } from "@/components/ai/VoiceTutorModal";
 
 const mockPerformanceData = [
   { day: "Mon", percentile: 78, accuracy: 65 },
@@ -110,6 +111,7 @@ export default function DashboardPage() {
   const targetPercentile = onboardingData?.targetPercentile ?? 95;
 
   const [quote, setQuote] = useState(getRandomQuote);
+  const [voiceTutorOpen, setVoiceTutorOpen] = useState(false);
 
   useEffect(() => {
     const fetchMotivation = async () => {
@@ -559,9 +561,13 @@ export default function DashboardPage() {
                 <span className="text-xs bg-yellow-400/20 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-400/20">Elite</span>
               </div>
               <p className="text-sm text-white/50 mb-4">Learn through AI-powered voice explanations. Ask questions by speaking.</p>
-              <button className="w-full py-2.5 text-sm font-semibold bg-yellow-400/20 border border-yellow-400/30 text-yellow-400 rounded-xl hover:bg-yellow-400/30 transition-all flex items-center justify-center gap-2">
+              <button
+                onClick={() => setVoiceTutorOpen(true)}
+                className="w-full py-2.5 text-sm font-semibold bg-yellow-400/20 border border-yellow-400/30 text-yellow-400 rounded-xl hover:bg-yellow-400/30 transition-all flex items-center justify-center gap-2"
+              >
                 <Mic size={14} /> Start Voice Session
               </button>
+              <VoiceTutorModal open={voiceTutorOpen} onClose={() => setVoiceTutorOpen(false)} />
             </motion.div>
           )}
 
