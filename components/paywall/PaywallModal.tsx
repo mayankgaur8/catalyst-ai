@@ -6,7 +6,7 @@ import { X, Zap, Crown, Check, ArrowRight, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { Feature, Plan } from "@/lib/features";
+import type { Feature } from "@/lib/features";
 import { getRequiredPlan, PLAN_LABELS } from "@/lib/features";
 
 interface PaywallModalProps {
@@ -71,27 +71,28 @@ export function PaywallModal({ open, onClose, feature, headline }: PaywallModalP
   const router = useRouter();
   const { isAdmin } = useAuthStore();
 
-  // Admins never see this modal — hard guard
-  if (isAdmin) return null;
-
   const requiredPlan = feature ? getRequiredPlan(feature) : "pro";
   const targetPlan: "pro" | "elite" = requiredPlan === "elite" ? "elite" : "pro";
   const config = PLAN_CONFIG[targetPlan];
 
-  // Close on Escape
+  // Close on Escape — guarded inside, not before the hook
   useEffect(() => {
-    if (!open) return;
+    if (!open || isAdmin) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, isAdmin, onClose]);
 
-  // Prevent body scroll while open
+  // Prevent body scroll while open — guarded inside, not before the hook
   useEffect(() => {
+    if (isAdmin) return;
     if (open) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
     return () => { document.body.style.overflow = ""; };
-  }, [open]);
+  }, [open, isAdmin]);
+
+  // Admins never see this modal — early return only AFTER all hooks
+  if (isAdmin) return null;
 
   function handleUpgrade() {
     onClose();
