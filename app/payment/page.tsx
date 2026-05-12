@@ -5,11 +5,47 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CreditCard, Shield, CheckCircle2, Lock,
-  ArrowLeft, Sparkles, Tag, X
+  ArrowLeft, Sparkles, Tag, X, AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { Plan } from "@/lib/features";
+
+// ─── Razorpay SDK types ───────────────────────────────────────────────────────
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill?: { name?: string; email?: string };
+  notes?: Record<string, string>;
+  theme?: { color?: string };
+  handler?: (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => void;
+  modal?: { ondismiss?: () => void };
+}
+interface RazorpayInstance {
+  open(): void;
+  close(): void;
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(false);
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 const PLAN_DETAILS: Record<string, { name: string; monthly: number; yearly: number; icon: string; color: string }> = {
   pro: { name: "Pro", monthly: 1999, yearly: 14999, icon: "⚡", color: "neon-blue" },
@@ -41,6 +77,7 @@ function PaymentPageInner() {
   const [couponError, setCouponError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [step, setStep] = useState<"checkout" | "processing" | "success">("checkout");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const [card, setCard] = useState({ number: "", name: "", expiry: "", cvv: "" });
 
@@ -85,15 +122,101 @@ function PaymentPageInner() {
   }
 
   async function handlePayment() {
-    if (!planId) return;
-    if (method === "upi" && !upiId.includes("@")) return;
+    if (!planId || !user?.id) return;
+    setPaymentError(null);
     setProcessing(true);
     setStep("processing");
-    await new Promise((r) => setTimeout(r, 2500));
-    activateSubscription(planId, billingType === "yearly" ? 12 : 1);
-    setStep("success");
-    await new Promise((r) => setTimeout(r, 2000));
-    router.push("/onboarding");
+
+    try {
+      // 1. Load Razorpay SDK
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) throw new Error("Could not load payment SDK. Please check your connection.");
+
+      // 2. Create order on our backend
+      const orderRes = await fetch("/api/payments/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": user.id },
+        body: JSON.stringify({
+          plan: planId.toUpperCase(),
+          billingCycle: billingType,
+          provider: "razorpay",
+        }),
+      });
+
+      if (!orderRes.ok) {
+        const err = await orderRes.json() as { error?: string };
+        throw new Error(err.error ?? "Order creation failed");
+      }
+
+      const order = await orderRes.json() as {
+        orderId: string;
+        amount: number;
+        currency: string;
+        keyId: string;
+        userName: string;
+        userEmail: string;
+        description: string;
+      };
+
+      // 3. Open Razorpay checkout
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: order.keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: "CATalyst AI",
+          description: order.description,
+          order_id: order.orderId,
+          prefill: { name: order.userName, email: order.userEmail },
+          theme: { color: "#3B82F6" },
+          handler: async (response) => {
+            try {
+              // 4. Verify payment server-side
+              const verifyRes = await fetch("/api/payments/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-user-id": user.id },
+                body: JSON.stringify({
+                  provider: "razorpay",
+                  paymentId: response.razorpay_payment_id,
+                  orderId: response.razorpay_order_id,
+                  signature: response.razorpay_signature,
+                }),
+              });
+
+              if (!verifyRes.ok) {
+                const err = await verifyRes.json() as { error?: string };
+                throw new Error(err.error ?? "Payment verification failed");
+              }
+
+              // 5. Sync local store
+              const billingMonths = billingType === "yearly" ? 12 : 1;
+              activateSubscription(planId, billingMonths);
+
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              reject(new Error("Payment cancelled"));
+            },
+          },
+        });
+        rzp.open();
+      });
+
+      setStep("success");
+      await new Promise((r) => setTimeout(r, 2000));
+      router.push("/onboarding");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Payment failed";
+      if (msg !== "Payment cancelled") {
+        setPaymentError(msg);
+      }
+      setStep("checkout");
+      setProcessing(false);
+    }
   }
 
   return (
@@ -335,6 +458,18 @@ function PaymentPageInner() {
               {couponError && <p className="text-red-400 text-xs mt-2">{couponError}</p>}
               <p className="text-white/25 text-xs mt-2">Try: CAT2025, FIRST50, WELCOME</p>
             </div>
+
+            {/* Error banner */}
+            {paymentError && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-start gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400"
+              >
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{paymentError}</span>
+              </motion.div>
+            )}
 
             {/* Pay button */}
             <motion.button

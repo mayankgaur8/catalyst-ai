@@ -27,6 +27,8 @@ model User {
   updatedAt   DateTime @updatedAt
 
   subscription      Subscription?
+  paymentOrders     PaymentOrder[]
+  paymentTx         PaymentTransaction[]
   videoProgress     VideoProgress[]
   watchSessions     VideoWatchSession[]
   xpEvents          XpEvent[]
@@ -58,19 +60,25 @@ enum Role {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Subscription {
-  id             String           @id @default(cuid())
-  userId         String           @unique
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan           Plan             @default(FREE)
-  status         SubscriptionStatus @default(ACTIVE)
-  activatedAt    DateTime         @default(now())
-  expiresAt      DateTime?
-  razorpaySubId  String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id               String             @id @default(cuid())
+  userId           String             @unique
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             Plan               @default(FREE)
+  status           SubscriptionStatus @default(ACTIVE)
+  provider         String?            // "razorpay" | "stripe"
+  billingCycle     String?            // "monthly" | "yearly"
+  activatedAt      DateTime           @default(now())
+  expiresAt        DateTime?
+  trialEndsAt      DateTime?
+  razorpaySubId    String?
+  stripeSubId      String?
+  stripeCustomerId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([userId])
   @@index([plan, status])
+  @@index([expiresAt])
 }
 
 enum Plan {
@@ -84,6 +92,49 @@ enum SubscriptionStatus {
   EXPIRED
   CANCELLED
   TRIAL
+}
+
+// Tracks Razorpay/Stripe orders before payment confirmation
+model PaymentOrder {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String   // "razorpay" | "stripe"
+  providerId   String   @unique // razorpay order_id or stripe payment_intent_id
+  plan         Plan
+  amount       Int      // in smallest unit (paise / cents)
+  currency     String   @default("INR")
+  status       String   @default("created") // "created" | "paid" | "failed" | "expired"
+  billingCycle String   @default("monthly")
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Immutable record of every captured payment
+model PaymentTransaction {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentOrderId  String?  // our internal PaymentOrder.id
+  provider        String   // "razorpay" | "stripe"
+  paymentId       String   @unique // provider payment ID
+  providerOrderId String?  // provider order ID (razorpay order_id)
+  plan            Plan
+  amount          Int
+  currency        String   @default("INR")
+  status          String   // "captured" | "failed" | "refunded"
+  idempotencyKey  String?  @unique
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
