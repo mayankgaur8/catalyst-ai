@@ -390,7 +390,7 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v6",
-    youtubeId: null,
+    youtubeId: "rgVeDeBcdqU",
     title: "Para Jumbles: Framework & Strategy",
     instructor: "Dr. Priya Nair",
     description: "A reliable 3-step framework to solve Para Jumble questions with high accuracy in CAT VARC.",
