@@ -407,7 +407,7 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v7",
-    youtubeId: null,
+    youtubeId: "iMcK9-ksrdU",
     title: "Data Interpretation: Advanced Caselet Solving",
     instructor: "Vikram Sharma",
     description: "Crack complex caselet DI sets with structured tabulation and approximation techniques.",
