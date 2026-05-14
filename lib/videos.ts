@@ -424,9 +424,9 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
   },
   {
     id: "v8",
-    youtubeId: null,
+    youtubeId: "RacSefBiUwk",
     title: "Geometry Shortcuts & CAT PYQs",
-    instructor: "Prof. Arun Kumar",
+    instructor: "Rajiv Mehta",
     description: "High-yield geometry shortcuts with walkthroughs of previous year CAT questions from 2018–2024.",
     duration: "1:02:18",
     views: "21K",
