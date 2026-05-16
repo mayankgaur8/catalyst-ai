@@ -38,7 +38,195 @@ export interface MockTest {
   targetPercentile: string;
   /** Topic covered, for topic-type tests */
   topic?: string;
+  /** Topics covered — shown in the detail modal */
+  topics?: string[];
+  /** Who should attempt this test */
+  recommendedFor?: string;
+  /** What improvement to expect */
+  expectedImprovement?: string;
+  /** AI mentor personalised advice */
+  aiMentorAdvice?: string;
 }
+
+// ── Attempt history ───────────────────────────────────────────────────────────
+
+export interface MockAttempt {
+  id: string;
+  testId: number;
+  testName: string;
+  category: MockCategory;
+  date: string;
+  percentile: number;
+  accuracy: number;
+  /** minutes actually used */
+  timeTaken: number;
+  score: number;
+  totalScore: number;
+  /** positive = improved, negative = dropped vs prior attempt */
+  improvement: number | null;
+}
+
+export const MOCK_ATTEMPT_HISTORY: MockAttempt[] = [
+  {
+    id: "a1",
+    testId: 2,
+    testName: "CAT Full Mock #2",
+    category: "Full",
+    date: "2026-05-14",
+    percentile: 91.2,
+    accuracy: 80,
+    timeTaken: 112,
+    score: 132,
+    totalScore: 198,
+    improvement: null,
+  },
+  {
+    id: "a2",
+    testId: 1,
+    testName: "CAT Full Mock #1",
+    category: "Full",
+    date: "2026-05-10",
+    percentile: 88.5,
+    accuracy: 74,
+    timeTaken: 118,
+    score: 118,
+    totalScore: 198,
+    improvement: null,
+  },
+  {
+    id: "a3",
+    testId: 10,
+    testName: "Adaptive Mock #1",
+    category: "Adaptive",
+    date: "2026-05-07",
+    percentile: 85,
+    accuracy: 76,
+    timeTaken: 58,
+    score: 92,
+    totalScore: 120,
+    improvement: 5,
+  },
+  {
+    id: "a4",
+    testId: 7,
+    testName: "DILR Sectional #1",
+    category: "Sectional",
+    date: "2026-05-04",
+    percentile: 65,
+    accuracy: 58,
+    timeTaken: 38,
+    score: 48,
+    totalScore: 60,
+    improvement: null,
+  },
+  {
+    id: "a5",
+    testId: 5,
+    testName: "VARC Sectional #1",
+    category: "Sectional",
+    date: "2026-04-28",
+    percentile: 78,
+    accuracy: 68,
+    timeTaken: 39,
+    score: 54,
+    totalScore: 72,
+    improvement: 6,
+  },
+];
+
+// ── 7-Day practice plan ────────────────────────────────────────────────────────
+
+export interface DayPlan {
+  day: number;
+  dayLabel: string;
+  testId: number;
+  testName: string;
+  category: MockCategory;
+  reason: string;
+  duration: string;
+  xp: number;
+  completed: boolean;
+}
+
+export const SEVEN_DAY_PLAN: DayPlan[] = [
+  {
+    day: 1,
+    dayLabel: "Mon",
+    testId: 34,
+    testName: "Daily Mini #1 — Morning Warm-up",
+    category: "Mini",
+    reason: "Ease into the week. 20 min, all three sections, build momentum.",
+    duration: "20 min",
+    xp: 60,
+    completed: true,
+  },
+  {
+    day: 2,
+    dayLabel: "Tue",
+    testId: 7,
+    testName: "DILR Sectional #1",
+    category: "Sectional",
+    reason: "Your DILR accuracy is lowest — targeted sectional for focused improvement.",
+    duration: "40 min",
+    xp: 100,
+    completed: true,
+  },
+  {
+    day: 3,
+    dayLabel: "Wed",
+    testId: 13,
+    testName: "QA Speed Challenge",
+    category: "Speed",
+    reason: "Mid-week speed drill to sharpen calculation reflexes.",
+    duration: "30 min",
+    xp: 120,
+    completed: false,
+  },
+  {
+    day: 4,
+    dayLabel: "Thu",
+    testId: 2,
+    testName: "CAT Full Mock #2",
+    category: "Full",
+    reason: "Full simulation — peak focus day. Simulate exam-day conditions.",
+    duration: "120 min",
+    xp: 200,
+    completed: false,
+  },
+  {
+    day: 5,
+    dayLabel: "Fri",
+    testId: 19,
+    testName: "VARC Topic — Para Jumbles",
+    category: "Topic",
+    reason: "Revision day — reinforce Para Jumbles where you dropped 12% last week.",
+    duration: "20 min",
+    xp: 70,
+    completed: false,
+  },
+  {
+    day: 6,
+    dayLabel: "Sat",
+    testId: 26,
+    testName: "Advanced Mock #1 — 99 Percentile",
+    category: "Advanced",
+    reason: "Push beyond comfort zone. Hard mock to identify ceiling.",
+    duration: "120 min",
+    xp: 250,
+    completed: false,
+  },
+  {
+    day: 7,
+    dayLabel: "Sun",
+    testId: 37,
+    testName: "Weekend Marathon #1",
+    category: "Marathon",
+    reason: "Full 3-hour weekend marathon + extended analysis. Real exam stamina training.",
+    duration: "180 min",
+    xp: 350,
+    completed: false,
+  },
+];
 
 export const MOCK_TESTS: MockTest[] = [
   // ── Full Mocks ────────────────────────────────────────────────────────────
@@ -58,6 +246,10 @@ export const MOCK_TESTS: MockTest[] = [
     description: "Full-length CAT simulation with all three sections at authentic difficulty.",
     xpReward: 200,
     targetPercentile: "85–92",
+    topics: ["Arithmetic", "Algebra", "Number System", "Reading Comprehension", "Para Jumbles", "Data Interpretation", "Logical Reasoning"],
+    recommendedFor: "Aspirants who have completed their first full syllabus pass and want a realistic benchmark.",
+    expectedImprovement: "Score benchmark + identify weakest section for the next 2 weeks of prep.",
+    aiMentorAdvice: "Focus on your time per question in QA — you tend to spend 3+ min on hard problems. Set a 2-min cap and move on.",
   },
   {
     id: 2,
@@ -75,6 +267,10 @@ export const MOCK_TESTS: MockTest[] = [
     description: "Harder QA section — designed to stress-test arithmetic and geometry speed.",
     xpReward: 200,
     targetPercentile: "88–95",
+    topics: ["Geometry", "Algebra", "Arithmetic", "Reading Comprehension", "Odd One Out", "Caselet DI", "Grid Puzzles"],
+    recommendedFor: "Aspirants targeting 88–95 percentile who need QA speed improvement.",
+    expectedImprovement: "Identify QA time-management ceiling and DILR set-selection strategy.",
+    aiMentorAdvice: "You scored 91%ile here before. Retake to cross 93 — your VARC dropped because of passage 3 (abstract philosophy). Skip strategy needed.",
   },
   {
     id: 3,
@@ -162,6 +358,10 @@ export const MOCK_TESTS: MockTest[] = [
     description: "2 DI caselets + 2 LR sets. Caselet-heavy design mirrors recent CAT patterns.",
     xpReward: 100,
     targetPercentile: "70–80",
+    topics: ["Data Interpretation", "Caselet DI", "Logical Reasoning", "Seating Arrangement"],
+    recommendedFor: "Anyone scoring below 72%ile in DILR who needs targeted practice.",
+    expectedImprovement: "DILR accuracy typically improves 8–12% after 3 sectional attempts.",
+    aiMentorAdvice: "You scored 65%ile here — your weakness is abandoning sets mid-way. Try completing easier sets first, then attempt harder ones.",
   },
   {
     id: 8,
@@ -215,6 +415,10 @@ export const MOCK_TESTS: MockTest[] = [
     description: "AI adjusts difficulty in real time based on your answer pattern. Reveals true level.",
     xpReward: 180,
     targetPercentile: "80–95",
+    topics: ["All topics — difficulty adapts per answer"],
+    recommendedFor: "Aspirants who want to discover their true current level before planning next sprint.",
+    expectedImprovement: "Reveals precise performance ceiling; typically unlocks 5–7 percentile headroom.",
+    aiMentorAdvice: "Don't second-guess — answer confidently and let the AI adapt. Hesitation patterns inflate your perceived difficulty.",
   },
   {
     id: 11,
