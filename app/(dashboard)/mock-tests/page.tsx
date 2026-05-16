@@ -3,11 +3,11 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  Clock, Play, Trophy, BarChart2, Target, Lightbulb,
-  CheckCircle, Bookmark, Flag, AlertCircle, ArrowLeft,
+  Clock, Play, Trophy, BarChart2, Target,
+  Bookmark, Flag,
   TrendingUp, Brain, FileText, Zap, Flame, Search, Filter,
   X, ChevronDown, ChevronUp, GitCompare, RotateCcw,
-  Calendar, Star, ArrowRight, CheckCircle2, Circle,
+  Calendar, CheckCircle2, Circle,
 } from "lucide-react";
 import { cn, formatTime } from "@/lib/utils";
 import { SAMPLE_QUESTIONS } from "@/lib/data";
@@ -18,8 +18,9 @@ import { addNotification } from "@/lib/notifications";
 import {
   MOCK_TESTS, CATEGORY_META, LABEL_META, DIFFICULTY_COLOR, DIFFICULTY_BAR,
   MOCK_ATTEMPT_HISTORY, SEVEN_DAY_PLAN,
-  MockCategory, MockTest, MockAttempt,
+  MockCategory, MockTest,
 } from "@/lib/mockTests";
+import TestAnalysis from "@/components/mock/TestAnalysis";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1028,124 +1029,6 @@ function MockTestInterface({ onFinish }: { onFinish: (answers: Record<number, nu
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test Analysis (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function TestAnalysis({ onBack }: { onBack: () => void }) {
-  const sectionScores = [
-    { section: "VARC", score: 42, total: 72, percentile: 82, correct: 14, wrong: 3, unattempted: 7 },
-    { section: "DILR", score: 36, total: 60, percentile: 72, correct: 12, wrong: 6, unattempted: 2 },
-    { section: "QA",   score: 54, total: 66, percentile: 88, correct: 18, wrong: 0, unattempted: 4 },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <button onClick={onBack} className="p-2 glass rounded-xl text-white/50 hover:text-white border border-white/8">
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h2 className="text-xl font-bold">Test Analysis</h2>
-          <p className="text-white/40 text-sm">Detailed Breakdown — AI Powered</p>
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-4 gap-4">
-        {[
-          { label: "Overall Percentile", value: "89.2", sub: "↑ 3.7 from last mock", color: "text-yellow-400" },
-          { label: "Total Score",        value: "132/198", sub: "66.7% score",       color: "text-neon-blue" },
-          { label: "Accuracy",           value: "81%",    sub: "44 correct, 9 wrong", color: "text-green-400" },
-          { label: "Time Used",          value: "112/120m", sub: "8 min remaining", color: "text-purple-400" },
-        ].map((s) => (
-          <div key={s.label} className="glass rounded-2xl p-4 border border-white/5 text-center">
-            <div className={cn("text-3xl font-bold mb-1", s.color)}>{s.value}</div>
-            <div className="text-sm font-medium text-white/70">{s.label}</div>
-            <div className="text-xs text-white/30 mt-0.5">{s.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="glass rounded-2xl p-5 border border-white/5">
-        <h3 className="font-semibold mb-4">Section-wise Performance</h3>
-        <div className="space-y-4">
-          {sectionScores.map((s) => (
-            <div key={s.section} className="p-4 bg-white/3 rounded-xl border border-white/5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold">{s.section}</span>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="text-green-400">+{s.correct * 3}</span>
-                  <span className="text-red-400">-{s.wrong}</span>
-                  <span className="font-bold text-neon-blue">{s.percentile}%ile</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
-                <div className="bg-green-500/10 rounded-lg p-2">
-                  <div className="text-green-400 font-bold text-lg">{s.correct}</div>
-                  <div className="text-white/30">Correct</div>
-                </div>
-                <div className="bg-red-500/10 rounded-lg p-2">
-                  <div className="text-red-400 font-bold text-lg">{s.wrong}</div>
-                  <div className="text-white/30">Wrong</div>
-                </div>
-                <div className="bg-white/5 rounded-lg p-2">
-                  <div className="text-white/40 font-bold text-lg">{s.unattempted}</div>
-                  <div className="text-white/30">Skipped</div>
-                </div>
-              </div>
-              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-neon-blue to-neon-purple rounded-full"
-                  style={{ width: `${(s.score / s.total) * 100}%` }}
-                />
-              </div>
-              <div className="text-xs text-white/30 mt-1">Score: {s.score}/{s.total}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="glass rounded-2xl p-5 border border-neon-blue/20 bg-neon-blue/3">
-        <div className="flex items-center gap-2 mb-4">
-          <Brain size={20} className="text-neon-blue" />
-          <h3 className="font-semibold">AI Performance Insights</h3>
-        </div>
-        <div className="space-y-3">
-          {[
-            { type: "strength", text: "QA: Excellent performance in Arithmetic (100% accuracy). Time management was efficient." },
-            { type: "warning",  text: "DILR: Spent 18 min on 2 questions you got wrong — skip strategy needed for Games & Tournament sets." },
-            { type: "tip",      text: "VARC: Reading speed is good but Para Summary accuracy is 40% — dedicate 3 sessions this week." },
-            { type: "predict",  text: "If you improve DILR to 80%ile, your overall percentile jumps to 94+." },
-          ].map((insight, i) => (
-            <div key={i} className={cn(
-              "flex items-start gap-3 p-3 rounded-xl",
-              insight.type === "strength" && "bg-green-500/10 border border-green-500/20",
-              insight.type === "warning"  && "bg-orange-500/10 border border-orange-500/20",
-              insight.type === "tip"      && "bg-blue-500/10 border border-blue-500/20",
-              insight.type === "predict"  && "bg-neon-purple/10 border border-neon-purple/20",
-            )}>
-              {insight.type === "strength" && <CheckCircle  size={15} className="text-green-400 mt-0.5 flex-shrink-0" />}
-              {insight.type === "warning"  && <AlertCircle  size={15} className="text-orange-400 mt-0.5 flex-shrink-0" />}
-              {insight.type === "tip"      && <Lightbulb    size={15} className="text-blue-400 mt-0.5 flex-shrink-0" />}
-              {insight.type === "predict"  && <TrendingUp   size={15} className="text-neon-purple mt-0.5 flex-shrink-0" />}
-              <p className="text-sm text-white/70">{insight.text}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <button className="flex-1 py-3 bg-gradient-to-r from-neon-blue to-neon-purple rounded-xl text-sm font-semibold">
-          Practice Weak Areas
-        </button>
-        <button onClick={onBack} className="flex-1 py-3 glass rounded-xl text-sm font-semibold text-white/60 border border-white/10">
-          Back to Tests
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Collapsible wrapper
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1253,7 +1136,7 @@ export default function MockTestsPage() {
   };
 
   if (testState === "running")  return <MockTestInterface onFinish={handleFinish} />;
-  if (testState === "analysis") return <TestAnalysis onBack={() => setTestState("list")} />;
+  if (testState === "analysis") return <TestAnalysis onBack={() => setTestState("list")} onRetake={() => setTestState("running")} />;
 
   return (
     <>
