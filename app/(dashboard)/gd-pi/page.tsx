@@ -3,9 +3,9 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
-  MessageSquare, Mic, Video, FileText, Brain, Play,
-  ChevronRight, Star, CheckCircle, Lightbulb, Clock,
-  Users, TrendingUp, Sparkles, Send, ThumbsUp, ThumbsDown
+  MessageSquare, FileText, Brain,
+  ChevronRight, Star, Lightbulb, Clock, Users,
+  Sparkles, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

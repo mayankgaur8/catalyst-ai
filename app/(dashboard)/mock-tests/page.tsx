@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Clock, Play, Trophy, BarChart2, Target,
   Bookmark, Flag,
@@ -306,7 +306,7 @@ function MockCard({
       role="button"
       tabIndex={0}
       aria-label={`View details for ${test.name}`}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); compareMode ? onCompareToggle() : onDetails(); } }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (compareMode) { onCompareToggle(); } else { onDetails(); } } }}
     >
       <div className={cn("h-0.5 w-full bg-gradient-to-r", getCategoryGradient(test.category))} />
 
@@ -520,7 +520,7 @@ function SevenDayPlan({ onStart }: { onStart: () => void }) {
         <div className="px-5 py-3 border-t border-white/5 flex items-start gap-2">
           <Brain size={12} className="text-neon-blue mt-0.5 flex-shrink-0" />
           <p className="text-[11px] text-white/45">
-            <span className="text-neon-blue font-semibold">Today's pick: </span>
+            <span className="text-neon-blue font-semibold">Today&apos;s pick: </span>
             {SEVEN_DAY_PLAN[completedCount].reason}
           </p>
         </div>
@@ -781,7 +781,7 @@ function EmptySearch({ query }: { query: string }) {
       className="py-16 text-center"
     >
       <Search size={32} className="mx-auto text-white/15 mb-3" />
-      <p className="text-sm font-semibold text-white/40">No tests match "{query}"</p>
+      <p className="text-sm font-semibold text-white/40">No tests match &ldquo;{query}&rdquo;</p>
       <p className="text-xs text-white/25 mt-1">Try a different keyword or browse by category.</p>
     </motion.div>
   );
