@@ -875,4 +875,29 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
     deletedAt: null,
     xpToastMessage: "🌟 Elite VARC strategy unlocked! Keep compounding your accuracy.",
   },
+  {
+    id: "xzLKa5ZELYc",
+    youtubeId: "xzLKa5ZELYc",
+    title: "Ratio & Proportion",
+    instructor: "CATalyst AI",
+    description: "Master the art of solving Ratio & Proportion problems with CATalyst AI.",
+    duration: "45:00",
+    views: "25K",
+    rating: 4.8,
+    category: "QA",
+    access: "pro",
+    tags: ["QA", "Ratio", "Proportion", "CAT"],
+    featured: false,
+    order: 999, // Adjust order as needed
+    status: "published",
+    deletedAt: null,
+    aiSummary: "Learn advanced techniques for Ratio & Proportion problems.",
+    keyTakeaways: [
+      "Understand the basics of ratios.",
+      "Learn proportionality rules.",
+      "Solve complex problems efficiently."
+    ],
+    quiz: [],
+    xpToastMessage: "Great job! You've earned +50 XP for completing this lesson."
+  }
 ];
