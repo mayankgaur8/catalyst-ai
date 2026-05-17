@@ -899,5 +899,24 @@ export const DEFAULT_VIDEOS: VideoLesson[] = [
     ],
     quiz: [],
     xpToastMessage: "Great job! You've earned +50 XP for completing this lesson."
+  },
+  {
+    id: "cat-video-mtzuygin3jw",
+    youtubeId: "mTzuYGIN3jw",
+    title: "Mastering Alligation",
+    instructor: "CATalyst AI",
+    description:
+      "Master alligation with exam-focused CAT QA methods for weighted averages, mixture replacement, and ratio-based shortcut solving.",
+    duration: "48:00",
+    views: "27K",
+    rating: 4.9,
+    category: "QA",
+    access: "pro",
+    tags: ["Alligation", "QA", "Mixtures", "CAT Quant", "CATalyst AI"],
+    featured: true,
+    order: 16,
+    status: "published",
+    deletedAt: null,
+    xpToastMessage: "🧪 Alligation mastery unlocked! Your QA speed just levelled up.",
   }
 ];
